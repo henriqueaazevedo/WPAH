@@ -1,0 +1,9 @@
+{
+  "name": "wpah-gestao",
+  "version": "1.0.0",
+  "description": "Sistema de Gestão de Pessoas e Documentos",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
