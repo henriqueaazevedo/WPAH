@@ -1,9 +1,11 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 
 export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const usuario = JSON.parse(localStorage.getItem('usuario') || '{}');
+  const [termo, setTermo] = useState('');
 
   function sair() {
     localStorage.removeItem('usuario');
@@ -14,6 +16,11 @@ export default function Navbar() {
     return location.pathname.startsWith(path) ? 'navbar-link ativo' : 'navbar-link';
   }
 
+  function buscar(e) {
+    e.preventDefault();
+    navigate(`/busca?q=${encodeURIComponent(termo)}`);
+  }
+
   return (
     <header>
       <div className="gov-feedback-bar">
@@ -22,17 +29,18 @@ export default function Navbar() {
       <div className="site-header">
         <div className="site-header-inner">
           <Link to="/pessoas" className="site-logo">WPAH | Secretaria Digital</Link>
-          <div className="site-tools">
-            <select aria-label="Idioma" className="site-lang-select">
-              <option>Selecionar idioma</option>
-              <option>Portugues</option>
-              <option>English</option>
-            </select>
-            <div className="site-search">
-              <input type="text" placeholder="Buscar" aria-label="Buscar" />
-              <button type="button" className="site-search-btn">Buscar</button>
+          <form className="site-tools" onSubmit={buscar}>
+            <div className="site-search site-search-wide">
+              <input
+                type="text"
+                placeholder="Buscar pessoas, documentos ou protocolos"
+                aria-label="Buscar"
+                value={termo}
+                onChange={e => setTermo(e.target.value)}
+              />
+              <button type="submit" className="site-search-btn">Buscar</button>
             </div>
-          </div>
+          </form>
         </div>
       </div>
       <nav className="navbar">
@@ -40,12 +48,14 @@ export default function Navbar() {
           <div className="navbar-nav">
             <Link to="/pessoas" className={ativo('/pessoas')}>Pessoas e Cadastros</Link>
             <Link to="/documentos" className={ativo('/documentos')}>Leis e Documentos</Link>
-            <span className="navbar-link fake-link">Servicos</span>
-            <span className="navbar-link fake-link">Transparencia</span>
+            <Link to="/protocolos" className={ativo('/protocolos')}>Protocolos</Link>
+            <Link to="/servicos" className={ativo('/servicos')}>Servicos</Link>
+            <Link to="/transparencia" className={ativo('/transparencia')}>Transparencia</Link>
           </div>
           <div className="navbar-usuario">
+            <Link to="/perfil" className={ativo('/perfil')}>Perfil</Link>
             <span className="navbar-tag">{usuario.nome || 'Usuario'}</span>
-            <button className="btn btn-sm btn-logout" onClick={sair}>Sair</button>
+            <button className="btn btn-sm btn-logout" onClick={sair} type="button">Sair</button>
           </div>
         </div>
       </nav>

@@ -1,6 +1,8 @@
 const http = require('http');
 const pessoas = require('./routes/pessoas');
 const documentos = require('./routes/documentos');
+const protocolos = require('./routes/protocolos');
+const publico = require('./routes/publico');
 const auth = require('./routes/auth');
 
 const PORTA = 3000;
@@ -21,8 +23,8 @@ function lerBody(req) {
 }
 
 function extrairId(partes, posicao) {
-  const id = parseInt(partes[posicao]);
-  return isNaN(id) ? null : id;
+  const id = parseInt(partes[posicao], 10);
+  return Number.isNaN(id) ? null : id;
 }
 
 function responderErro(res, status, mensagem) {
@@ -31,10 +33,11 @@ function responderErro(res, status, mensagem) {
 }
 
 const server = http.createServer(async (req, res) => {
-  const { method, url } = req;
-  const partes = url.split('/').filter(Boolean);
+  const parsedUrl = new URL(req.url, `http://${req.headers.host || `localhost:${PORTA}`}`);
+  const pathname = parsedUrl.pathname;
+  const partes = pathname.split('/').filter(Boolean);
+  const { method } = req;
 
-  // CORS simples para facilitar testes via ferramentas externas
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -45,12 +48,6 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
-    // ============================================================
-    // ROTAS DE AUTENTICAÇÃO
-    // POST /cadastro
-    // POST /login
-    // GET  /usuarios
-    // ============================================================
     if (partes[0] === 'cadastro' && method === 'POST') {
       const body = await lerBody(req);
       return auth.cadastrar(req, res, body);
@@ -61,23 +58,36 @@ const server = http.createServer(async (req, res) => {
       return auth.login(req, res, body);
     }
 
-    if (partes[0] === 'usuarios' && method === 'GET') {
+    if (partes[0] === 'usuarios' && method === 'GET' && partes.length === 1) {
       return auth.listarUsuarios(req, res);
     }
 
-    // ============================================================
-    // ROTAS DE PESSOAS
-    // GET    /pessoas
-    // GET    /pessoas/:id
-    // POST   /pessoas
-    // PUT    /pessoas/:id
-    // DELETE /pessoas/:id
-    // GET    /pessoas/:id/documentos
-    // ============================================================
+    if (partes[0] === 'perfil') {
+      const id = extrairId(partes, 1);
+      if (!id) return responderErro(res, 400, 'ID de usuário inválido');
+
+      if (method === 'GET') return auth.buscarPerfil(req, res, id);
+      if (method === 'PUT') {
+        const body = await lerBody(req);
+        return auth.atualizarPerfil(req, res, id, body);
+      }
+    }
+
+    if (partes[0] === 'busca' && method === 'GET') {
+      return publico.buscar(req, res);
+    }
+
+    if (partes[0] === 'servicos' && method === 'GET') {
+      return publico.listarServicos(req, res);
+    }
+
+    if (partes[0] === 'transparencia' && method === 'GET') {
+      return publico.transparencia(req, res);
+    }
+
     if (partes[0] === 'pessoas') {
       const id = partes[1] ? extrairId(partes, 1) : null;
 
-      // GET /pessoas/:id/documentos
       if (method === 'GET' && id && partes[2] === 'documentos') {
         return documentos.listarDocumentosDaPessoa(req, res, id);
       }
@@ -98,14 +108,6 @@ const server = http.createServer(async (req, res) => {
       if (method === 'DELETE' && id) return pessoas.deletarPessoa(req, res, id);
     }
 
-    // ============================================================
-    // ROTAS DE DOCUMENTOS
-    // GET    /documentos
-    // GET    /documentos/:id
-    // POST   /documentos
-    // PUT    /documentos/:id
-    // DELETE /documentos/:id
-    // ============================================================
     if (partes[0] === 'documentos') {
       const id = partes[1] ? extrairId(partes, 1) : null;
 
@@ -125,32 +127,63 @@ const server = http.createServer(async (req, res) => {
       if (method === 'DELETE' && id) return documentos.deletarDocumento(req, res, id);
     }
 
-    // Rota raiz — lista rotas disponíveis
-    if (url === '/' || url === '') {
+    if (partes[0] === 'protocolos') {
+      const id = partes[1] ? extrairId(partes, 1) : null;
+
+      if (method === 'GET' && !id) return protocolos.listarProtocolos(req, res);
+      if (method === 'GET' && id) return protocolos.buscarProtocolo(req, res, id);
+
+      if (method === 'POST') {
+        const body = await lerBody(req);
+        return protocolos.criarProtocolo(req, res, body);
+      }
+
+      if (method === 'PUT' && id) {
+        const body = await lerBody(req);
+        return protocolos.atualizarProtocolo(req, res, id, body);
+      }
+
+      if (method === 'DELETE' && id) return protocolos.deletarProtocolo(req, res, id);
+    }
+
+    if (pathname === '/' || pathname === '') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({
-        sistema: 'Gestão de Pessoas e Documentos',
-        versao: '1.0.0',
+        sistema: 'Gestão de Pessoas, Documentos e Protocolos',
+        versao: '2.0.0',
         rotas: {
           autenticacao: {
-            'POST /cadastro': 'Criar conta { nome, email, senha }',
-            'POST /login': 'Entrar { email, senha }',
-            'GET /usuarios': 'Listar usuários cadastrados'
+            'POST /cadastro': 'Criar conta com pessoa vinculada',
+            'POST /login': 'Entrar com email ou login',
+            'GET /usuarios': 'Listar usuários cadastrados',
+            'GET /perfil/:id': 'Buscar perfil do usuário',
+            'PUT /perfil/:id': 'Atualizar perfil do usuário'
           },
           pessoas: {
-            'GET /pessoas': 'Listar todas as pessoas',
+            'GET /pessoas?q=&startDate=&endDate=': 'Listar pessoas com filtros',
             'GET /pessoas/:id': 'Buscar pessoa por ID',
-            'POST /pessoas': 'Criar pessoa { nome, cpf, email?, telefone?, dataNascimento? }',
+            'POST /pessoas': 'Criar pessoa e gerar acesso automático',
             'PUT /pessoas/:id': 'Atualizar pessoa',
-            'DELETE /pessoas/:id': 'Remover pessoa',
-            'GET /pessoas/:id/documentos': 'Documentos vinculados a uma pessoa'
+            'DELETE /pessoas/:id': 'Remover pessoa'
           },
           documentos: {
-            'GET /documentos': 'Listar todos os documentos',
+            'GET /documentos?q=&startDate=&endDate=': 'Listar documentos com filtros',
             'GET /documentos/:id': 'Buscar documento por ID',
-            'POST /documentos': 'Criar documento { titulo, tipo, descricao?, pessoaId?, conteudo? }',
+            'POST /documentos': 'Criar documento',
             'PUT /documentos/:id': 'Atualizar documento',
             'DELETE /documentos/:id': 'Remover documento'
+          },
+          protocolos: {
+            'GET /protocolos?q=&startDate=&endDate=': 'Listar protocolos com filtros',
+            'GET /protocolos/:id': 'Buscar protocolo por ID',
+            'POST /protocolos': 'Criar protocolo',
+            'PUT /protocolos/:id': 'Atualizar protocolo',
+            'DELETE /protocolos/:id': 'Remover protocolo'
+          },
+          portal: {
+            'GET /busca?q=&startDate=&endDate=': 'Busca global em pessoas, documentos e protocolos',
+            'GET /servicos': 'Listar serviços do portal',
+            'GET /transparencia': 'Indicadores e últimos registros'
           }
         }
       }, null, 2));
@@ -163,25 +196,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORTA, () => {
-  console.log(`\n========================================`);
-  console.log(`  Sistema de Gestão de Pessoas e Docs  `);
-  console.log(`  Servidor rodando em http://localhost:${PORTA}`);
-  console.log(`========================================\n`);
-  console.log('Rotas disponíveis:');
-  console.log('  POST   /cadastro');
-  console.log('  POST   /login');
-  console.log('  GET    /usuarios');
-  console.log('  ---');
-  console.log('  GET    /pessoas');
-  console.log('  GET    /pessoas/:id');
-  console.log('  POST   /pessoas');
-  console.log('  PUT    /pessoas/:id');
-  console.log('  DELETE /pessoas/:id');
-  console.log('  GET    /pessoas/:id/documentos');
-  console.log('  ---');
-  console.log('  GET    /documentos');
-  console.log('  GET    /documentos/:id');
-  console.log('  POST   /documentos');
-  console.log('  PUT    /documentos/:id');
-  console.log('  DELETE /documentos/:id\n');
+  console.log(`Servidor rodando em http://localhost:${PORTA}`);
 });

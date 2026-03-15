@@ -4,7 +4,7 @@ import { api } from '../api.js';
 
 export default function Login() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ email: '', senha: '' });
+  const [form, setForm] = useState({ acesso: '', senha: '' });
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(false);
 
@@ -41,14 +41,14 @@ export default function Login() {
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label htmlFor="email">E-mail</label>
+            <label htmlFor="acesso">E-mail ou login</label>
             <input
-              id="email"
-              name="email"
-              type="email"
-              value={form.email}
+              id="acesso"
+              name="acesso"
+              type="text"
+              value={form.acesso}
               onChange={handleChange}
-              placeholder="seu@email.com"
+              placeholder="seu@email.com ou login gerado"
               required
               autoFocus
             />

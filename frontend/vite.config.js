@@ -9,8 +9,13 @@ export default defineConfig({
       '/login':      { target: 'http://localhost:3000', changeOrigin: true },
       '/cadastro':   { target: 'http://localhost:3000', changeOrigin: true },
       '/usuarios':   { target: 'http://localhost:3000', changeOrigin: true },
+      '/perfil':     { target: 'http://localhost:3000', changeOrigin: true },
+      '/busca':      { target: 'http://localhost:3000', changeOrigin: true },
+      '/servicos':   { target: 'http://localhost:3000', changeOrigin: true },
+      '/transparencia': { target: 'http://localhost:3000', changeOrigin: true },
       '/pessoas':    { target: 'http://localhost:3000', changeOrigin: true },
       '/documentos': { target: 'http://localhost:3000', changeOrigin: true },
+      '/protocolos': { target: 'http://localhost:3000', changeOrigin: true },
     }
   }
 });

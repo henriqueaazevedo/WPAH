@@ -4,7 +4,7 @@ import { api } from '../api.js';
 
 export default function Cadastro() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ nome: '', email: '', senha: '' });
+  const [form, setForm] = useState({ nome: '', email: '', cpf: '', telefone: '', dataNascimento: '', senha: '' });
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(false);
 
@@ -62,6 +62,39 @@ export default function Cadastro() {
               onChange={handleChange}
               placeholder="seu@email.com"
               required
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="cpf">CPF</label>
+            <input
+              id="cpf"
+              name="cpf"
+              type="text"
+              value={form.cpf}
+              onChange={handleChange}
+              placeholder="000.000.000-00"
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="telefone">Telefone</label>
+            <input
+              id="telefone"
+              name="telefone"
+              type="text"
+              value={form.telefone}
+              onChange={handleChange}
+              placeholder="(00) 00000-0000"
+            />
+          </div>
+          <div className="form-group">
+            <label htmlFor="dataNascimento">Data de nascimento</label>
+            <input
+              id="dataNascimento"
+              name="dataNascimento"
+              type="date"
+              value={form.dataNascimento}
+              onChange={handleChange}
             />
           </div>
           <div className="form-group">

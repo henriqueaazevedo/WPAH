@@ -1,36 +1,66 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api.js';
+import Modal from '../components/Modal.jsx';
+import LoadingBlock from '../components/LoadingBlock.jsx';
 
-const FORM_VAZIO = { nome: '', cpf: '', email: '', telefone: '', dataNascimento: '' };
+const FORM_VAZIO = {
+  nome: '',
+  cpf: '',
+  email: '',
+  telefone: '',
+  dataNascimento: '',
+  senha: ''
+};
 
-function formatarData(iso) {
-  if (!iso) return '—';
-  // suporta "YYYY-MM-DD" e ISO completo
-  const d = iso.includes('T') ? new Date(iso) : new Date(iso + 'T00:00:00');
-  return d.toLocaleDateString('pt-BR');
+function formatarData(valor) {
+  if (!valor) return '—';
+  const data = new Date(String(valor).includes('T') ? valor : `${valor}T00:00:00`);
+  return data.toLocaleDateString('pt-BR');
 }
 
 export default function Pessoas() {
-  const [lista, setLista]           = useState([]);
-  const [form, setForm]             = useState(FORM_VAZIO);
+  const [lista, setLista] = useState([]);
+  const [form, setForm] = useState(FORM_VAZIO);
+  const [filtros, setFiltros] = useState({ q: '', startDate: '', endDate: '' });
   const [editandoId, setEditandoId] = useState(null);
   const [mostrarForm, setMostrarForm] = useState(false);
-  const [erro, setErro]             = useState('');
-  const [msg, setMsg]               = useState('');
+  const [selecionada, setSelecionada] = useState(null);
+  const [credenciaisGeradas, setCredenciaisGeradas] = useState(null);
+  const [erro, setErro] = useState('');
+  const [msg, setMsg] = useState('');
   const [carregando, setCarregando] = useState(true);
-  const [enviando, setEnviando]     = useState(false);
+  const [enviando, setEnviando] = useState(false);
 
-  useEffect(() => { listar(); }, []);
+  useEffect(() => {
+    listar();
+  }, []);
 
-  async function listar() {
+  async function listar(params = filtros) {
     setCarregando(true);
     try {
-      setLista(await api.getPessoas());
+      const dados = await api.getPessoas(params);
+      setLista(dados);
     } catch (e) {
       setErro(e.message);
     } finally {
       setCarregando(false);
     }
+  }
+
+  function handleFiltroChange(e) {
+    setFiltros(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  }
+
+  function aplicarFiltros(e) {
+    e.preventDefault();
+    setErro('');
+    listar(filtros);
+  }
+
+  function limparFiltros() {
+    const novos = { q: '', startDate: '', endDate: '' };
+    setFiltros(novos);
+    listar(novos);
   }
 
   function handleChange(e) {
@@ -39,15 +69,26 @@ export default function Pessoas() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setErro(''); setMsg(''); setEnviando(true);
+    setErro('');
+    setMsg('');
+    setEnviando(true);
+
     try {
       if (editandoId) {
         await api.atualizarPessoa(editandoId, form);
         setMsg('Pessoa atualizada com sucesso.');
       } else {
-        await api.criarPessoa(form);
+        const resposta = await api.criarPessoa(form);
         setMsg('Pessoa cadastrada com sucesso.');
+        if (resposta.acesso) {
+          setCredenciaisGeradas({
+            nome: resposta.nome,
+            login: resposta.acesso.login,
+            senha: resposta.acesso.senha
+          });
+        }
       }
+
       cancelar();
       listar();
     } catch (e) {
@@ -57,23 +98,22 @@ export default function Pessoas() {
     }
   }
 
-  function handleEditar(p) {
+  function handleEditar(pessoa) {
     setForm({
-      nome:           p.nome,
-      cpf:            p.cpf,
-      email:          p.email          || '',
-      telefone:       p.telefone        || '',
-      dataNascimento: p.dataNascimento  || '',
+      nome: pessoa.nome,
+      cpf: pessoa.cpf,
+      email: pessoa.email || '',
+      telefone: pessoa.telefone || '',
+      dataNascimento: pessoa.dataNascimento || '',
+      senha: ''
     });
-    setEditandoId(p.id);
+    setEditandoId(pessoa.id);
     setMostrarForm(true);
-    setErro(''); setMsg('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   async function handleDeletar(id, nome) {
-    if (!confirm(`Confirma a exclusão de "${nome}"?\nEsta ação não pode ser desfeita.`)) return;
-    setErro(''); setMsg('');
+    if (!window.confirm(`Confirma a exclusão de "${nome}"?`)) return;
     try {
       await api.deletarPessoa(id);
       setMsg('Pessoa removida com sucesso.');
@@ -84,116 +124,90 @@ export default function Pessoas() {
   }
 
   function cancelar() {
-    setMostrarForm(false);
-    setEditandoId(null);
     setForm(FORM_VAZIO);
-    setErro('');
-  }
-
-  function abrirNovo() {
-    cancelar();
-    setMostrarForm(true);
+    setEditandoId(null);
+    setMostrarForm(false);
   }
 
   return (
     <div className="container">
-      {/* Cabeçalho da página */}
       <div className="page-header">
         <div>
           <h1 className="page-title">Gestão de Pessoas</h1>
-          <p className="page-subtitle">
-            Cadastro, consulta e administração de pessoas
-          </p>
+          <p className="page-subtitle">Cadastro completo com geração automática de acesso.</p>
         </div>
         {!mostrarForm && (
-          <button className="btn btn-primary" onClick={abrirNovo}>
+          <button className="btn btn-primary" onClick={() => setMostrarForm(true)}>
             + Nova Pessoa
           </button>
         )}
       </div>
 
-      {msg  && <div className="alerta alerta-sucesso">{msg}</div>}
+      {msg && <div className="alerta alerta-sucesso">{msg}</div>}
       {erro && <div className="alerta alerta-erro">{erro}</div>}
 
-      {/* Formulário de cadastro / edição */}
+      <div className="card">
+        <h2 className="card-title">Busca e período</h2>
+        <form className="filter-bar" onSubmit={aplicarFiltros}>
+          <input name="q" value={filtros.q} onChange={handleFiltroChange} placeholder="Buscar por nome, CPF, email ou telefone" />
+          <input name="startDate" type="date" value={filtros.startDate} onChange={handleFiltroChange} />
+          <input name="endDate" type="date" value={filtros.endDate} onChange={handleFiltroChange} />
+          <button className="btn btn-primary" type="submit">Filtrar</button>
+          <button className="btn btn-secondary" type="button" onClick={limparFiltros}>Limpar</button>
+        </form>
+      </div>
+
       {mostrarForm && (
         <div className="card">
-          <h2 className="card-title">
-            {editandoId ? '✏️ Editar Pessoa' : '➕ Cadastrar Nova Pessoa'}
-          </h2>
+          <h2 className="card-title">{editandoId ? 'Editar pessoa' : 'Cadastrar nova pessoa'}</h2>
           <form onSubmit={handleSubmit}>
             <div className="form-grid">
               <div className="form-group">
-                <label htmlFor="nome">Nome completo *</label>
-                <input
-                  id="nome" name="nome"
-                  value={form.nome} onChange={handleChange}
-                  required placeholder="Nome completo"
-                  autoFocus
-                />
+                <label>Nome completo *</label>
+                <input name="nome" value={form.nome} onChange={handleChange} required />
               </div>
               <div className="form-group">
-                <label htmlFor="cpf">CPF *</label>
-                <input
-                  id="cpf" name="cpf"
-                  value={form.cpf} onChange={handleChange}
-                  required placeholder="000.000.000-00"
-                />
+                <label>CPF *</label>
+                <input name="cpf" value={form.cpf} onChange={handleChange} required />
               </div>
               <div className="form-group">
-                <label htmlFor="email">E-mail</label>
-                <input
-                  id="email" name="email" type="email"
-                  value={form.email} onChange={handleChange}
-                  placeholder="email@exemplo.com"
-                />
+                <label>E-mail</label>
+                <input name="email" type="email" value={form.email} onChange={handleChange} />
               </div>
               <div className="form-group">
-                <label htmlFor="telefone">Telefone</label>
-                <input
-                  id="telefone" name="telefone"
-                  value={form.telefone} onChange={handleChange}
-                  placeholder="(00) 00000-0000"
-                />
+                <label>Telefone</label>
+                <input name="telefone" value={form.telefone} onChange={handleChange} />
               </div>
               <div className="form-group">
-                <label htmlFor="dataNascimento">Data de Nascimento</label>
-                <input
-                  id="dataNascimento" name="dataNascimento" type="date"
-                  value={form.dataNascimento} onChange={handleChange}
-                />
+                <label>Data de nascimento</label>
+                <input name="dataNascimento" type="date" value={form.dataNascimento} onChange={handleChange} />
+              </div>
+              <div className="form-group">
+                <label>Senha inicial {editandoId ? '(opcional)' : '(opcional)'}</label>
+                <input name="senha" type="text" value={form.senha} onChange={handleChange} placeholder="Se vazio, usa os 6 últimos dígitos do CPF" />
               </div>
             </div>
             <div className="form-actions">
-              <button type="submit" className="btn btn-primary" disabled={enviando}>
+              <button className="btn btn-primary" type="submit" disabled={enviando}>
                 {enviando ? <span className="spinner" /> : null}
-                {editandoId ? 'Salvar Alterações' : 'Cadastrar Pessoa'}
+                {editandoId ? 'Salvar alterações' : 'Cadastrar pessoa'}
               </button>
-              <button type="button" className="btn btn-secondary" onClick={cancelar}>
-                Cancelar
-              </button>
+              <button className="btn btn-secondary" type="button" onClick={cancelar}>Cancelar</button>
             </div>
           </form>
         </div>
       )}
 
-      {/* Tabela de pessoas */}
       <div className="card">
         <h2 className="card-title">
-          Pessoas Cadastradas
-          {!carregando && (
-            <span className="badge registro-badge">
-              {lista.length} registro{lista.length !== 1 ? 's' : ''}
-            </span>
-          )}
+          Pessoas cadastradas
+          {!carregando && <span className="badge registro-badge">{lista.length} registros</span>}
         </h2>
 
         {carregando ? (
-          <p className="vazio">
-            <span className="spinner dark" /> &nbsp;Carregando...
-          </p>
+          <LoadingBlock texto="Carregando pessoas..." />
         ) : lista.length === 0 ? (
-          <p className="vazio">Nenhuma pessoa cadastrada. Clique em "+ Nova Pessoa" para começar.</p>
+          <p className="vazio">Nenhuma pessoa encontrada para os filtros informados.</p>
         ) : (
           <div className="table-wrapper">
             <table>
@@ -209,28 +223,19 @@ export default function Pessoas() {
                 </tr>
               </thead>
               <tbody>
-                {lista.map(p => (
-                  <tr key={p.id}>
-                    <td><span className="badge">{p.id}</span></td>
-                    <td><strong>{p.nome}</strong></td>
-                    <td>{p.cpf}</td>
-                    <td>{p.email    || <span className="muted">—</span>}</td>
-                    <td>{p.telefone || <span className="muted">—</span>}</td>
-                    <td>{formatarData(p.dataNascimento)}</td>
+                {lista.map(pessoa => (
+                  <tr key={pessoa.id}>
+                    <td><span className="badge">{pessoa.id}</span></td>
+                    <td><strong>{pessoa.nome}</strong></td>
+                    <td>{pessoa.cpf}</td>
+                    <td>{pessoa.email || <span className="muted">—</span>}</td>
+                    <td>{pessoa.telefone || <span className="muted">—</span>}</td>
+                    <td>{formatarData(pessoa.dataNascimento)}</td>
                     <td>
                       <div className="td-actions">
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => handleEditar(p)}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          className="btn btn-danger btn-sm"
-                          onClick={() => handleDeletar(p.id, p.nome)}
-                        >
-                          Excluir
-                        </button>
+                        <button className="btn btn-secondary btn-sm" onClick={() => setSelecionada(pessoa)}>Ver</button>
+                        <button className="btn btn-secondary btn-sm" onClick={() => handleEditar(pessoa)}>Editar</button>
+                        <button className="btn btn-danger btn-sm" onClick={() => handleDeletar(pessoa.id, pessoa.nome)}>Excluir</button>
                       </div>
                     </td>
                   </tr>
@@ -241,9 +246,30 @@ export default function Pessoas() {
         )}
       </div>
 
-      <footer className="rodape">
-        WPAH &copy; {new Date().getFullYear()} — Gestão de Pessoas e Documentos
-      </footer>
+      <Modal aberto={!!selecionada} titulo="Detalhes da pessoa" onClose={() => setSelecionada(null)}>
+        {selecionada && (
+          <div className="detail-grid">
+            <p><strong>Nome:</strong> {selecionada.nome}</p>
+            <p><strong>CPF:</strong> {selecionada.cpf}</p>
+            <p><strong>E-mail:</strong> {selecionada.email || '—'}</p>
+            <p><strong>Telefone:</strong> {selecionada.telefone || '—'}</p>
+            <p><strong>Nascimento:</strong> {formatarData(selecionada.dataNascimento)}</p>
+            <p><strong>Cadastro:</strong> {formatarData(selecionada.criadoEm)}</p>
+          </div>
+        )}
+      </Modal>
+
+      <Modal aberto={!!credenciaisGeradas} titulo="Acesso gerado para a pessoa" onClose={() => setCredenciaisGeradas(null)}>
+        {credenciaisGeradas && (
+          <div className="detail-grid">
+            <p><strong>Nome:</strong> {credenciaisGeradas.nome}</p>
+            <p><strong>Login:</strong> {credenciaisGeradas.login}</p>
+            <p><strong>Senha inicial:</strong> {credenciaisGeradas.senha}</p>
+          </div>
+        )}
+      </Modal>
+
+      <footer className="rodape">WPAH © {new Date().getFullYear()} — Gestão de Pessoas</footer>
     </div>
   );
 }

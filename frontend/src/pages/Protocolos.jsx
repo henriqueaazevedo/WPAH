@@ -3,10 +3,19 @@ import { api } from '../api.js';
 import Modal from '../components/Modal.jsx';
 import LoadingBlock from '../components/LoadingBlock.jsx';
 
-const TIPOS = ['Lei', 'Contrato', 'Ofício', 'Certidão', 'Relatório', 'Portaria', 'Decreto', 'Outros'];
-const FORM_VAZIO = { titulo: '', tipo: '', descricao: '', pessoaId: '', conteudo: '' };
+const TIPOS = ['Atendimento', 'Solicitação', 'Requerimento', 'Denúncia', 'Processo'];
+const SITUACOES = ['Em análise', 'Recebido', 'Pendente', 'Concluído', 'Arquivado'];
+const FORM_VAZIO = {
+  titulo: '',
+  tipo: '',
+  descricao: '',
+  pessoaId: '',
+  conteudo: '',
+  situacao: 'Em análise',
+  dataProtocolo: ''
+};
 
-export default function Documentos() {
+export default function Protocolos() {
   const [lista, setLista] = useState([]);
   const [pessoas, setPessoas] = useState([]);
   const [form, setForm] = useState(FORM_VAZIO);
@@ -26,11 +35,11 @@ export default function Documentos() {
   async function carregarBase() {
     setCarregando(true);
     try {
-      const [documentos, pessoasData] = await Promise.all([
-        api.getDocumentos(),
+      const [protocolos, pessoasData] = await Promise.all([
+        api.getProtocolos(),
         api.getPessoas()
       ]);
-      setLista(documentos);
+      setLista(protocolos);
       setPessoas(pessoasData);
     } catch (e) {
       setErro(e.message);
@@ -42,7 +51,7 @@ export default function Documentos() {
   async function listar(params = filtros) {
     setCarregando(true);
     try {
-      setLista(await api.getDocumentos(params));
+      setLista(await api.getProtocolos(params));
     } catch (e) {
       setErro(e.message);
     } finally {
@@ -73,18 +82,17 @@ export default function Documentos() {
     e.preventDefault();
     setEnviando(true);
     setErro('');
-
     try {
       const payload = {
         ...form,
         pessoaId: form.pessoaId ? parseInt(form.pessoaId, 10) : null
       };
       if (editandoId) {
-        await api.atualizarDocumento(editandoId, payload);
-        setMsg('Documento atualizado com sucesso.');
+        await api.atualizarProtocolo(editandoId, payload);
+        setMsg('Protocolo atualizado com sucesso.');
       } else {
-        await api.criarDocumento(payload);
-        setMsg('Documento cadastrado com sucesso.');
+        await api.criarProtocolo(payload);
+        setMsg('Protocolo cadastrado com sucesso.');
       }
       setForm(FORM_VAZIO);
       setEditandoId(null);
@@ -97,23 +105,25 @@ export default function Documentos() {
     }
   }
 
-  function editar(documento) {
+  function editar(protocolo) {
     setForm({
-      titulo: documento.titulo,
-      tipo: documento.tipo,
-      descricao: documento.descricao || '',
-      pessoaId: documento.pessoaId ? String(documento.pessoaId) : '',
-      conteudo: documento.conteudo || ''
+      titulo: protocolo.titulo,
+      tipo: protocolo.tipo,
+      descricao: protocolo.descricao || '',
+      pessoaId: protocolo.pessoaId ? String(protocolo.pessoaId) : '',
+      conteudo: protocolo.conteudo || '',
+      situacao: protocolo.situacao || 'Em análise',
+      dataProtocolo: protocolo.dataProtocolo || ''
     });
-    setEditandoId(documento.id);
+    setEditandoId(protocolo.id);
     setMostrarForm(true);
   }
 
-  async function excluir(documento) {
-    if (!window.confirm(`Confirma a exclusão de "${documento.titulo}"?`)) return;
+  async function excluir(protocolo) {
+    if (!window.confirm(`Confirma a exclusão do protocolo "${protocolo.numero}"?`)) return;
     try {
-      await api.deletarDocumento(documento.id);
-      setMsg('Documento removido com sucesso.');
+      await api.deletarProtocolo(protocolo.id);
+      setMsg('Protocolo removido com sucesso.');
       listar();
     } catch (e) {
       setErro(e.message);
@@ -130,10 +140,10 @@ export default function Documentos() {
     <div className="container">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Leis e Documentos</h1>
-          <p className="page-subtitle">Documentos administrativos com busca por período e conteúdo.</p>
+          <h1 className="page-title">Protocolos</h1>
+          <p className="page-subtitle">Controle completo de solicitações e tramitações.</p>
         </div>
-        {!mostrarForm && <button className="btn btn-primary" onClick={() => setMostrarForm(true)}>+ Novo Documento</button>}
+        {!mostrarForm && <button className="btn btn-primary" onClick={() => setMostrarForm(true)}>+ Novo Protocolo</button>}
       </div>
 
       {msg && <div className="alerta alerta-sucesso">{msg}</div>}
@@ -142,7 +152,7 @@ export default function Documentos() {
       <div className="card">
         <h2 className="card-title">Busca e período</h2>
         <form className="filter-bar" onSubmit={aplicarFiltros}>
-          <input name="q" value={filtros.q} onChange={handleFiltroChange} placeholder="Buscar por título, tipo ou conteúdo" />
+          <input name="q" value={filtros.q} onChange={handleFiltroChange} placeholder="Buscar por número, título, tipo ou situação" />
           <input name="startDate" type="date" value={filtros.startDate} onChange={handleFiltroChange} />
           <input name="endDate" type="date" value={filtros.endDate} onChange={handleFiltroChange} />
           <button className="btn btn-primary" type="submit">Filtrar</button>
@@ -152,7 +162,7 @@ export default function Documentos() {
 
       {mostrarForm && (
         <div className="card">
-          <h2 className="card-title">{editandoId ? 'Editar documento' : 'Cadastrar novo documento'}</h2>
+          <h2 className="card-title">{editandoId ? 'Editar protocolo' : 'Cadastrar novo protocolo'}</h2>
           <form onSubmit={handleSubmit}>
             <div className="form-grid">
               <div className="form-group">
@@ -167,6 +177,16 @@ export default function Documentos() {
                 </select>
               </div>
               <div className="form-group">
+                <label>Situação</label>
+                <select name="situacao" value={form.situacao} onChange={handleChange}>
+                  {SITUACOES.map(situacao => <option key={situacao} value={situacao}>{situacao}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Data do protocolo</label>
+                <input name="dataProtocolo" type="date" value={form.dataProtocolo} onChange={handleChange} />
+              </div>
+              <div className="form-group">
                 <label>Pessoa vinculada</label>
                 <select name="pessoaId" value={form.pessoaId} onChange={handleChange}>
                   <option value="">Nenhuma</option>
@@ -179,11 +199,11 @@ export default function Documentos() {
               </div>
               <div className="form-group full">
                 <label>Conteúdo</label>
-                <textarea name="conteudo" value={form.conteudo} onChange={handleChange} rows={6} />
+                <textarea name="conteudo" value={form.conteudo} onChange={handleChange} rows={5} />
               </div>
             </div>
             <div className="form-actions">
-              <button className="btn btn-primary" type="submit" disabled={enviando}>{enviando ? <span className="spinner" /> : null}{editandoId ? 'Salvar alterações' : 'Cadastrar documento'}</button>
+              <button className="btn btn-primary" type="submit" disabled={enviando}>{enviando ? <span className="spinner" /> : null}{editandoId ? 'Salvar alterações' : 'Cadastrar protocolo'}</button>
               <button className="btn btn-secondary" type="button" onClick={() => { setMostrarForm(false); setEditandoId(null); setForm(FORM_VAZIO); }}>Cancelar</button>
             </div>
           </form>
@@ -191,39 +211,39 @@ export default function Documentos() {
       )}
 
       <div className="card">
-        <h2 className="card-title">Documentos cadastrados {!carregando && <span className="badge registro-badge">{lista.length} registros</span>}</h2>
+        <h2 className="card-title">Protocolos cadastrados {!carregando && <span className="badge registro-badge">{lista.length} registros</span>}</h2>
         {carregando ? (
-          <LoadingBlock texto="Carregando documentos..." />
+          <LoadingBlock texto="Carregando protocolos..." />
         ) : lista.length === 0 ? (
-          <p className="vazio">Nenhum documento encontrado para os filtros informados.</p>
+          <p className="vazio">Nenhum protocolo encontrado para os filtros informados.</p>
         ) : (
           <div className="table-wrapper">
             <table>
               <thead>
                 <tr>
                   <th>#</th>
+                  <th>Número</th>
                   <th>Título</th>
-                  <th>Tipo</th>
+                  <th>Situação</th>
                   <th>Pessoa</th>
-                  <th>Descrição</th>
-                  <th>Cadastro</th>
+                  <th>Data</th>
                   <th>Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {lista.map(documento => (
-                  <tr key={documento.id}>
-                    <td><span className="badge">{documento.id}</span></td>
-                    <td><strong>{documento.titulo}</strong></td>
-                    <td><span className="badge badge-tipo">{documento.tipo}</span></td>
-                    <td>{nomePessoa(documento.pessoaId)}</td>
-                    <td>{documento.descricao || <span className="muted">—</span>}</td>
-                    <td>{documento.criadoEm ? new Date(documento.criadoEm).toLocaleDateString('pt-BR') : '—'}</td>
+                {lista.map(protocolo => (
+                  <tr key={protocolo.id}>
+                    <td><span className="badge">{protocolo.id}</span></td>
+                    <td><strong>{protocolo.numero}</strong></td>
+                    <td>{protocolo.titulo}</td>
+                    <td><span className="badge badge-tipo">{protocolo.situacao}</span></td>
+                    <td>{nomePessoa(protocolo.pessoaId)}</td>
+                    <td>{protocolo.dataProtocolo ? new Date(`${protocolo.dataProtocolo}T00:00:00`).toLocaleDateString('pt-BR') : '—'}</td>
                     <td>
                       <div className="td-actions">
-                        <button className="btn btn-secondary btn-sm" onClick={() => setSelecionado(documento)}>Ver</button>
-                        <button className="btn btn-secondary btn-sm" onClick={() => editar(documento)}>Editar</button>
-                        <button className="btn btn-danger btn-sm" onClick={() => excluir(documento)}>Excluir</button>
+                        <button className="btn btn-secondary btn-sm" onClick={() => setSelecionado(protocolo)}>Ver</button>
+                        <button className="btn btn-secondary btn-sm" onClick={() => editar(protocolo)}>Editar</button>
+                        <button className="btn btn-danger btn-sm" onClick={() => excluir(protocolo)}>Excluir</button>
                       </div>
                     </td>
                   </tr>
@@ -234,12 +254,14 @@ export default function Documentos() {
         )}
       </div>
 
-      <Modal aberto={!!selecionado} titulo="Conteúdo do documento" onClose={() => setSelecionado(null)}>
+      <Modal aberto={!!selecionado} titulo="Detalhes do protocolo" onClose={() => setSelecionado(null)}>
         {selecionado && (
           <div className="detail-grid">
+            <p><strong>Número:</strong> {selecionado.numero}</p>
             <p><strong>Título:</strong> {selecionado.titulo}</p>
             <p><strong>Tipo:</strong> {selecionado.tipo}</p>
-            <p><strong>Pessoa vinculada:</strong> {nomePessoa(selecionado.pessoaId)}</p>
+            <p><strong>Situação:</strong> {selecionado.situacao}</p>
+            <p><strong>Pessoa:</strong> {nomePessoa(selecionado.pessoaId)}</p>
             <p><strong>Descrição:</strong> {selecionado.descricao || '—'}</p>
             <div className="detail-text-block">
               <strong>Conteúdo</strong>
@@ -249,7 +271,7 @@ export default function Documentos() {
         )}
       </Modal>
 
-      <footer className="rodape">WPAH © {new Date().getFullYear()} — Leis e Documentos</footer>
+      <footer className="rodape">WPAH © {new Date().getFullYear()} — Protocolos</footer>
     </div>
   );
 }

@@ -1,10 +1,24 @@
 const { lerArquivo, salvarArquivo, gerarId } = require('../utils/storage');
+const { correspondeBusca, dentroDoPeriodo } = require('../utils/filtros');
 
 const ARQUIVO = 'documentos.json';
 const ARQUIVO_PESSOAS = 'pessoas.json';
 
+function obterQuery(req) {
+  return new URL(req.url, 'http://localhost').searchParams;
+}
+
 function listarDocumentos(req, res) {
-  const documentos = lerArquivo(ARQUIVO);
+  const query = obterQuery(req);
+  const termo = query.get('q') || '';
+  const dataInicio = query.get('startDate') || '';
+  const dataFim = query.get('endDate') || '';
+
+  const documentos = lerArquivo(ARQUIVO).filter(documento => {
+    return correspondeBusca(documento, termo, ['titulo', 'tipo', 'descricao', 'conteudo'])
+      && dentroDoPeriodo(documento, ['criadoEm', 'atualizadoEm'], dataInicio, dataFim);
+  });
+
   responder(res, 200, documentos);
 }
 
