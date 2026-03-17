@@ -4,8 +4,9 @@ const documentos = require('./routes/documentos');
 const protocolos = require('./routes/protocolos');
 const publico = require('./routes/publico');
 const auth = require('./routes/auth');
+const { conectar } = require('./db/connection');
 
-const PORTA = 3000;
+const PORTA = process.env.PORT || 3003;
 
 function lerBody(req) {
   return new Promise((resolve, reject) => {
@@ -197,4 +198,11 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORTA, () => {
   console.log(`Servidor rodando em http://localhost:${PORTA}`);
+});
+
+// Inicializar conexão com MongoDB
+conectar().catch(erro => {
+  console.error('Erro ao conectar ao MongoDB. Verifique se o MongoDB está rodando e tente novamente.');
+  console.error('Execute: npm run init-db');
+  process.exit(1);
 });

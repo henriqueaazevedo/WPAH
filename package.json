@@ -4,6 +4,12 @@
   "description": "Sistema de Gestão de Pessoas e Documentos",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "init-db": "node db/init.js",
+    "clean-db": "node db/clean.js && npm run init-db"
+  },
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "mongodb": "^7.1.0"
   }
 }
