@@ -3,7 +3,18 @@ const { MongoClient } = require('mongodb');
 require('dotenv').config();
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/wpah';
-const DB_NAME = 'wpah';
+
+function extrairDbDaUri(uri) {
+  try {
+    const parsed = new URL(uri);
+    const db = parsed.pathname.replace(/^\//, '').trim();
+    return db || null;
+  } catch {
+    return null;
+  }
+}
+
+const DB_NAME = process.env.MONGO_DB_NAME || extrairDbDaUri(MONGO_URI) || 'wpah';
 
 let client = null;
 let db = null;
