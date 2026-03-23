@@ -36,6 +36,12 @@ export default function Cadastro() {
       <div className="auth-card">
         <h2>Criar Nova Conta</h2>
 
+        {carregando && (
+          <div className="auth-inline-loading" aria-live="polite" aria-label="Carregando cadastro">
+            <span className="mini-loader" />
+          </div>
+        )}
+
         {erro && <div className="alerta alerta-erro">{erro}</div>}
 
         <form onSubmit={handleSubmit}>

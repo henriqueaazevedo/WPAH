@@ -1,6 +1,6 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar.jsx';
-import HeroBanner from './components/HeroBanner.jsx';
 import Login from './pages/Login.jsx';
 import Cadastro from './pages/Cadastro.jsx';
 import Pessoas from './pages/Pessoas.jsx';
@@ -13,12 +13,27 @@ import Transparencia from './pages/Transparencia.jsx';
 
 function Layout({ children }) {
   const usuario = localStorage.getItem('usuario');
+  const location = useLocation();
+  const [carregandoSessao, setCarregandoSessao] = useState(false);
+
+  useEffect(() => {
+    setCarregandoSessao(true);
+    const timer = setTimeout(() => setCarregandoSessao(false), 220);
+    return () => clearTimeout(timer);
+  }, [location.pathname]);
+
   if (!usuario) return <Navigate to="/login" replace />;
   return (
     <>
       <Navbar />
-      <HeroBanner />
-      <main>{children}</main>
+      <main className="section-shell">
+        <div className="section-content page-transition">{children}</div>
+        {carregandoSessao && (
+          <div className="section-overlay" aria-live="polite" aria-label="Carregando sessão">
+            <span className="mini-loader" />
+          </div>
+        )}
+      </main>
     </>
   );
 }

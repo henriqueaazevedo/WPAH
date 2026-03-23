@@ -37,6 +37,12 @@ export default function Login() {
       <div className="auth-card">
         <h2>Acesso ao Sistema</h2>
 
+        {carregando && (
+          <div className="auth-inline-loading" aria-live="polite" aria-label="Carregando login">
+            <span className="mini-loader" />
+          </div>
+        )}
+
         {erro && <div className="alerta alerta-erro">{erro}</div>}
 
         <form onSubmit={handleSubmit}>

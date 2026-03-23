@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
 import Modal from '../components/Modal.jsx';
 import LoadingBlock from '../components/LoadingBlock.jsx';
+import Pagination from '../components/Pagination.jsx';
 
 const FORM_VAZIO = {
   nome: '',
@@ -19,17 +20,33 @@ function formatarData(valor) {
 }
 
 export default function Pessoas() {
+  const PAGE_SIZE = 8;
   const [lista, setLista] = useState([]);
   const [form, setForm] = useState(FORM_VAZIO);
   const [filtros, setFiltros] = useState({ q: '', startDate: '', endDate: '' });
   const [editandoId, setEditandoId] = useState(null);
   const [mostrarForm, setMostrarForm] = useState(false);
+  const [modalEdicaoAberto, setModalEdicaoAberto] = useState(false);
+  const [modalExclusaoPessoa, setModalExclusaoPessoa] = useState(null);
   const [selecionada, setSelecionada] = useState(null);
   const [credenciaisGeradas, setCredenciaisGeradas] = useState(null);
   const [erro, setErro] = useState('');
   const [msg, setMsg] = useState('');
   const [carregando, setCarregando] = useState(true);
   const [enviando, setEnviando] = useState(false);
+  const [paginaAtual, setPaginaAtual] = useState(1);
+
+  const listaPaginada = useMemo(() => {
+    const inicio = (paginaAtual - 1) * PAGE_SIZE;
+    return lista.slice(inicio, inicio + PAGE_SIZE);
+  }, [lista, paginaAtual]);
+
+  useEffect(() => {
+    const totalPaginas = Math.max(1, Math.ceil(lista.length / PAGE_SIZE));
+    if (paginaAtual > totalPaginas) {
+      setPaginaAtual(totalPaginas);
+    }
+  }, [lista, paginaAtual]);
 
   useEffect(() => {
     listar();
@@ -40,11 +57,16 @@ export default function Pessoas() {
     try {
       const dados = await api.getPessoas(params);
       setLista(dados);
+      setPaginaAtual(1);
     } catch (e) {
       setErro(e.message);
     } finally {
       setCarregando(false);
     }
+  }
+
+  function handleChange(e) {
+    setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
   }
 
   function handleFiltroChange(e) {
@@ -53,7 +75,6 @@ export default function Pessoas() {
 
   function aplicarFiltros(e) {
     e.preventDefault();
-    setErro('');
     listar(filtros);
   }
 
@@ -61,10 +82,6 @@ export default function Pessoas() {
     const novos = { q: '', startDate: '', endDate: '' };
     setFiltros(novos);
     listar(novos);
-  }
-
-  function handleChange(e) {
-    setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
   }
 
   async function handleSubmit(e) {
@@ -108,15 +125,15 @@ export default function Pessoas() {
       senha: ''
     });
     setEditandoId(pessoa.id);
-    setMostrarForm(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setModalEdicaoAberto(true);
   }
 
-  async function handleDeletar(id, nome) {
-    if (!window.confirm(`Confirma a exclusão de "${nome}"?`)) return;
+  async function confirmarExclusao() {
+    if (!modalExclusaoPessoa) return;
     try {
-      await api.deletarPessoa(id);
+      await api.deletarPessoa(modalExclusaoPessoa.id);
       setMsg('Pessoa removida com sucesso.');
+      setModalExclusaoPessoa(null);
       listar();
     } catch (e) {
       setErro(e.message);
@@ -127,6 +144,7 @@ export default function Pessoas() {
     setForm(FORM_VAZIO);
     setEditandoId(null);
     setMostrarForm(false);
+    setModalEdicaoAberto(false);
   }
 
   return (
@@ -137,7 +155,7 @@ export default function Pessoas() {
           <p className="page-subtitle">Cadastro completo com geração automática de acesso.</p>
         </div>
         {!mostrarForm && (
-          <button className="btn btn-primary" onClick={() => setMostrarForm(true)}>
+          <button className="btn btn-primary" onClick={() => { setEditandoId(null); setForm(FORM_VAZIO); setMostrarForm(true); }}>
             + Nova Pessoa
           </button>
         )}
@@ -147,9 +165,9 @@ export default function Pessoas() {
       {erro && <div className="alerta alerta-erro">{erro}</div>}
 
       <div className="card">
-        <h2 className="card-title">Busca e período</h2>
+        <h2 className="card-title">Filtros da sessão</h2>
         <form className="filter-bar" onSubmit={aplicarFiltros}>
-          <input name="q" value={filtros.q} onChange={handleFiltroChange} placeholder="Buscar por nome, CPF, email ou telefone" />
+          <input name="q" value={filtros.q} onChange={handleFiltroChange} placeholder="Buscar por nome, CPF, e-mail ou telefone" />
           <input name="startDate" type="date" value={filtros.startDate} onChange={handleFiltroChange} />
           <input name="endDate" type="date" value={filtros.endDate} onChange={handleFiltroChange} />
           <button className="btn btn-primary" type="submit">Filtrar</button>
@@ -207,7 +225,7 @@ export default function Pessoas() {
         {carregando ? (
           <LoadingBlock texto="Carregando pessoas..." />
         ) : lista.length === 0 ? (
-          <p className="vazio">Nenhuma pessoa encontrada para os filtros informados.</p>
+          <p className="vazio">Nenhuma pessoa encontrada.</p>
         ) : (
           <div className="table-wrapper">
             <table>
@@ -223,7 +241,7 @@ export default function Pessoas() {
                 </tr>
               </thead>
               <tbody>
-                {lista.map(pessoa => (
+                {listaPaginada.map(pessoa => (
                   <tr key={pessoa.id}>
                     <td><span className="badge">{pessoa.id}</span></td>
                     <td><strong>{pessoa.nome}</strong></td>
@@ -233,15 +251,21 @@ export default function Pessoas() {
                     <td>{formatarData(pessoa.dataNascimento)}</td>
                     <td>
                       <div className="td-actions">
-                        <button className="btn btn-secondary btn-sm" onClick={() => setSelecionada(pessoa)}>Ver</button>
-                        <button className="btn btn-secondary btn-sm" onClick={() => handleEditar(pessoa)}>Editar</button>
-                        <button className="btn btn-danger btn-sm" onClick={() => handleDeletar(pessoa.id, pessoa.nome)}>Excluir</button>
+                        <button className="btn btn-secondary btn-sm btn-icon" title="Ver" onClick={() => setSelecionada(pessoa)}>◉</button>
+                        <button className="btn btn-secondary btn-sm btn-icon" title="Editar" onClick={() => handleEditar(pessoa)}>✎</button>
+                        <button className="btn btn-danger btn-sm btn-icon" title="Excluir" onClick={() => setModalExclusaoPessoa(pessoa)}>✕</button>
                       </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            <Pagination
+              currentPage={paginaAtual}
+              totalItems={lista.length}
+              pageSize={PAGE_SIZE}
+              onChange={setPaginaAtual}
+            />
           </div>
         )}
       </div>
@@ -255,6 +279,53 @@ export default function Pessoas() {
             <p><strong>Telefone:</strong> {selecionada.telefone || '—'}</p>
             <p><strong>Nascimento:</strong> {formatarData(selecionada.dataNascimento)}</p>
             <p><strong>Cadastro:</strong> {formatarData(selecionada.criadoEm)}</p>
+          </div>
+        )}
+      </Modal>
+
+      <Modal aberto={modalEdicaoAberto} titulo="Editar pessoa" onClose={cancelar}>
+        <form onSubmit={handleSubmit}>
+          <div className="form-grid">
+            <div className="form-group">
+              <label>Nome completo *</label>
+              <input name="nome" value={form.nome} onChange={handleChange} required />
+            </div>
+            <div className="form-group">
+              <label>CPF *</label>
+              <input name="cpf" value={form.cpf} onChange={handleChange} required />
+            </div>
+            <div className="form-group">
+              <label>E-mail</label>
+              <input name="email" type="email" value={form.email} onChange={handleChange} />
+            </div>
+            <div className="form-group">
+              <label>Telefone</label>
+              <input name="telefone" value={form.telefone} onChange={handleChange} />
+            </div>
+            <div className="form-group">
+              <label>Data de nascimento</label>
+              <input name="dataNascimento" type="date" value={form.dataNascimento} onChange={handleChange} />
+            </div>
+            <div className="form-group">
+              <label>Senha inicial (opcional)</label>
+              <input name="senha" type="text" value={form.senha} onChange={handleChange} />
+            </div>
+          </div>
+          <div className="form-actions">
+            <button className="btn btn-primary" type="submit" disabled={enviando}>{enviando ? <span className="spinner" /> : null}Salvar alterações</button>
+            <button className="btn btn-secondary" type="button" onClick={cancelar}>Cancelar</button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal aberto={!!modalExclusaoPessoa} titulo="Confirmar exclusão" onClose={() => setModalExclusaoPessoa(null)}>
+        {modalExclusaoPessoa && (
+          <div className="detail-grid">
+            <p>Confirma excluir <strong>{modalExclusaoPessoa.nome}</strong>?</p>
+            <div className="form-actions">
+              <button className="btn btn-danger" type="button" onClick={confirmarExclusao}>Excluir</button>
+              <button className="btn btn-secondary" type="button" onClick={() => setModalExclusaoPessoa(null)}>Cancelar</button>
+            </div>
           </div>
         )}
       </Modal>

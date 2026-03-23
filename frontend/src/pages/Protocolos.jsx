@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
 import Modal from '../components/Modal.jsx';
 import LoadingBlock from '../components/LoadingBlock.jsx';
+import Pagination from '../components/Pagination.jsx';
 
 const TIPOS = ['Atendimento', 'Solicitação', 'Requerimento', 'Denúncia', 'Processo'];
 const SITUACOES = ['Em análise', 'Recebido', 'Pendente', 'Concluído', 'Arquivado'];
@@ -16,17 +17,33 @@ const FORM_VAZIO = {
 };
 
 export default function Protocolos() {
+  const PAGE_SIZE = 8;
   const [lista, setLista] = useState([]);
   const [pessoas, setPessoas] = useState([]);
   const [form, setForm] = useState(FORM_VAZIO);
   const [filtros, setFiltros] = useState({ q: '', startDate: '', endDate: '' });
   const [editandoId, setEditandoId] = useState(null);
   const [mostrarForm, setMostrarForm] = useState(false);
+  const [modalEdicaoAberto, setModalEdicaoAberto] = useState(false);
+  const [modalExclusaoProtocolo, setModalExclusaoProtocolo] = useState(null);
   const [selecionado, setSelecionado] = useState(null);
   const [erro, setErro] = useState('');
   const [msg, setMsg] = useState('');
   const [carregando, setCarregando] = useState(true);
   const [enviando, setEnviando] = useState(false);
+  const [paginaAtual, setPaginaAtual] = useState(1);
+
+  const listaPaginada = useMemo(() => {
+    const inicio = (paginaAtual - 1) * PAGE_SIZE;
+    return lista.slice(inicio, inicio + PAGE_SIZE);
+  }, [lista, paginaAtual]);
+
+  useEffect(() => {
+    const totalPaginas = Math.max(1, Math.ceil(lista.length / PAGE_SIZE));
+    if (paginaAtual > totalPaginas) {
+      setPaginaAtual(totalPaginas);
+    }
+  }, [lista, paginaAtual]);
 
   useEffect(() => {
     carregarBase();
@@ -52,11 +69,16 @@ export default function Protocolos() {
     setCarregando(true);
     try {
       setLista(await api.getProtocolos(params));
+      setPaginaAtual(1);
     } catch (e) {
       setErro(e.message);
     } finally {
       setCarregando(false);
     }
+  }
+
+  function handleChange(e) {
+    setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
   }
 
   function handleFiltroChange(e) {
@@ -72,10 +94,6 @@ export default function Protocolos() {
     const novos = { q: '', startDate: '', endDate: '' };
     setFiltros(novos);
     listar(novos);
-  }
-
-  function handleChange(e) {
-    setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
   }
 
   async function handleSubmit(e) {
@@ -97,6 +115,7 @@ export default function Protocolos() {
       setForm(FORM_VAZIO);
       setEditandoId(null);
       setMostrarForm(false);
+      setModalEdicaoAberto(false);
       listar();
     } catch (e) {
       setErro(e.message);
@@ -116,14 +135,15 @@ export default function Protocolos() {
       dataProtocolo: protocolo.dataProtocolo || ''
     });
     setEditandoId(protocolo.id);
-    setMostrarForm(true);
+    setModalEdicaoAberto(true);
   }
 
-  async function excluir(protocolo) {
-    if (!window.confirm(`Confirma a exclusão do protocolo "${protocolo.numero}"?`)) return;
+  async function confirmarExclusao() {
+    if (!modalExclusaoProtocolo) return;
     try {
-      await api.deletarProtocolo(protocolo.id);
+      await api.deletarProtocolo(modalExclusaoProtocolo.id);
       setMsg('Protocolo removido com sucesso.');
+      setModalExclusaoProtocolo(null);
       listar();
     } catch (e) {
       setErro(e.message);
@@ -150,7 +170,7 @@ export default function Protocolos() {
       {erro && <div className="alerta alerta-erro">{erro}</div>}
 
       <div className="card">
-        <h2 className="card-title">Busca e período</h2>
+        <h2 className="card-title">Filtros da sessão</h2>
         <form className="filter-bar" onSubmit={aplicarFiltros}>
           <input name="q" value={filtros.q} onChange={handleFiltroChange} placeholder="Buscar por número, título, tipo ou situação" />
           <input name="startDate" type="date" value={filtros.startDate} onChange={handleFiltroChange} />
@@ -215,7 +235,7 @@ export default function Protocolos() {
         {carregando ? (
           <LoadingBlock texto="Carregando protocolos..." />
         ) : lista.length === 0 ? (
-          <p className="vazio">Nenhum protocolo encontrado para os filtros informados.</p>
+          <p className="vazio">Nenhum protocolo encontrado.</p>
         ) : (
           <div className="table-wrapper">
             <table>
@@ -231,7 +251,7 @@ export default function Protocolos() {
                 </tr>
               </thead>
               <tbody>
-                {lista.map(protocolo => (
+                {listaPaginada.map(protocolo => (
                   <tr key={protocolo.id}>
                     <td><span className="badge">{protocolo.id}</span></td>
                     <td><strong>{protocolo.numero}</strong></td>
@@ -241,15 +261,21 @@ export default function Protocolos() {
                     <td>{protocolo.dataProtocolo ? new Date(`${protocolo.dataProtocolo}T00:00:00`).toLocaleDateString('pt-BR') : '—'}</td>
                     <td>
                       <div className="td-actions">
-                        <button className="btn btn-secondary btn-sm" onClick={() => setSelecionado(protocolo)}>Ver</button>
-                        <button className="btn btn-secondary btn-sm" onClick={() => editar(protocolo)}>Editar</button>
-                        <button className="btn btn-danger btn-sm" onClick={() => excluir(protocolo)}>Excluir</button>
+                        <button className="btn btn-secondary btn-sm btn-icon" title="Ver" onClick={() => setSelecionado(protocolo)}>◉</button>
+                        <button className="btn btn-secondary btn-sm btn-icon" title="Editar" onClick={() => editar(protocolo)}>✎</button>
+                        <button className="btn btn-danger btn-sm btn-icon" title="Excluir" onClick={() => setModalExclusaoProtocolo(protocolo)}>✕</button>
                       </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            <Pagination
+              currentPage={paginaAtual}
+              totalItems={lista.length}
+              pageSize={PAGE_SIZE}
+              onChange={setPaginaAtual}
+            />
           </div>
         )}
       </div>
@@ -266,6 +292,65 @@ export default function Protocolos() {
             <div className="detail-text-block">
               <strong>Conteúdo</strong>
               <p>{selecionado.conteudo || 'Sem conteúdo registrado.'}</p>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal aberto={modalEdicaoAberto} titulo="Editar protocolo" onClose={() => { setModalEdicaoAberto(false); setEditandoId(null); setForm(FORM_VAZIO); }}>
+        <form onSubmit={handleSubmit}>
+          <div className="form-grid">
+            <div className="form-group">
+              <label>Título *</label>
+              <input name="titulo" value={form.titulo} onChange={handleChange} required />
+            </div>
+            <div className="form-group">
+              <label>Tipo *</label>
+              <select name="tipo" value={form.tipo} onChange={handleChange} required>
+                <option value="">Selecione</option>
+                {TIPOS.map(tipo => <option key={tipo} value={tipo}>{tipo}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Situação</label>
+              <select name="situacao" value={form.situacao} onChange={handleChange}>
+                {SITUACOES.map(situacao => <option key={situacao} value={situacao}>{situacao}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Data do protocolo</label>
+              <input name="dataProtocolo" type="date" value={form.dataProtocolo} onChange={handleChange} />
+            </div>
+            <div className="form-group">
+              <label>Pessoa vinculada</label>
+              <select name="pessoaId" value={form.pessoaId} onChange={handleChange}>
+                <option value="">Nenhuma</option>
+                {pessoas.map(pessoa => <option key={pessoa.id} value={pessoa.id}>{pessoa.nome}</option>)}
+              </select>
+            </div>
+            <div className="form-group full">
+              <label>Descrição</label>
+              <input name="descricao" value={form.descricao} onChange={handleChange} />
+            </div>
+            <div className="form-group full">
+              <label>Conteúdo</label>
+              <textarea name="conteudo" value={form.conteudo} onChange={handleChange} rows={5} />
+            </div>
+          </div>
+          <div className="form-actions">
+            <button className="btn btn-primary" type="submit" disabled={enviando}>{enviando ? <span className="spinner" /> : null}Salvar alterações</button>
+            <button className="btn btn-secondary" type="button" onClick={() => { setModalEdicaoAberto(false); setEditandoId(null); setForm(FORM_VAZIO); }}>Cancelar</button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal aberto={!!modalExclusaoProtocolo} titulo="Confirmar exclusão" onClose={() => setModalExclusaoProtocolo(null)}>
+        {modalExclusaoProtocolo && (
+          <div className="detail-grid">
+            <p>Confirma excluir o protocolo <strong>{modalExclusaoProtocolo.numero}</strong>?</p>
+            <div className="form-actions">
+              <button className="btn btn-danger" type="button" onClick={confirmarExclusao}>Excluir</button>
+              <button className="btn btn-secondary" type="button" onClick={() => setModalExclusaoProtocolo(null)}>Cancelar</button>
             </div>
           </div>
         )}

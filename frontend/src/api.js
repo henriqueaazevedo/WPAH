@@ -12,7 +12,7 @@ function buildQuery(params = {}) {
 async function req(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(path, opts);
+  const res = await fetch(`/api${path}`, opts);
 
   // Some endpoints may respond with an empty body (e.g. 204/empty error responses).
   const raw = await res.text();
