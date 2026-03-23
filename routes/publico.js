@@ -1,27 +1,27 @@
-const { lerArquivo } = require('../utils/storage');
+const { lerColecao } = require('../utils/mongoStorage');
 const { correspondeBusca, dentroDoPeriodo } = require('../utils/filtros');
 
 function obterQuery(req) {
   return new URL(req.url, 'http://localhost').searchParams;
 }
 
-function buscar(req, res) {
+async function buscar(req, res) {
   const query = obterQuery(req);
   const termo = query.get('q') || '';
   const dataInicio = query.get('startDate') || '';
   const dataFim = query.get('endDate') || '';
 
-  const pessoas = lerArquivo('pessoas.json').filter(item => {
+  const pessoas = (await lerColecao('pessoas')).filter(item => {
     return correspondeBusca(item, termo, ['nome', 'cpf', 'email', 'telefone'])
       && dentroDoPeriodo(item, ['dataNascimento', 'criadoEm'], dataInicio, dataFim);
   });
 
-  const documentos = lerArquivo('documentos.json').filter(item => {
+  const documentos = (await lerColecao('documentos')).filter(item => {
     return correspondeBusca(item, termo, ['titulo', 'tipo', 'descricao', 'conteudo'])
       && dentroDoPeriodo(item, ['criadoEm', 'atualizadoEm'], dataInicio, dataFim);
   });
 
-  const protocolos = lerArquivo('protocolos.json').filter(item => {
+  const protocolos = (await lerColecao('protocolos')).filter(item => {
     return correspondeBusca(item, termo, ['numero', 'titulo', 'tipo', 'descricao', 'conteudo', 'situacao'])
       && dentroDoPeriodo(item, ['dataProtocolo', 'criadoEm', 'atualizadoEm'], dataInicio, dataFim);
   });
@@ -69,11 +69,11 @@ function listarServicos(req, res) {
   ]);
 }
 
-function transparencia(req, res) {
-  const pessoas = lerArquivo('pessoas.json');
-  const documentos = lerArquivo('documentos.json');
-  const protocolos = lerArquivo('protocolos.json');
-  const usuarios = lerArquivo('usuarios.json');
+async function transparencia(req, res) {
+  const pessoas = await lerColecao('pessoas');
+  const documentos = await lerColecao('documentos');
+  const protocolos = await lerColecao('protocolos');
+  const usuarios = await lerColecao('usuarios');
 
   responder(res, 200, {
     totais: {

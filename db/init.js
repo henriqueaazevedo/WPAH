@@ -1,5 +1,5 @@
 const { conectar, desconectar, obterDb } = require('./connection');
-const { lerArquivo } = require('../utils/storage');
+const fs = require('fs');
 const path = require('path');
 
 const COLECOES = {
@@ -52,7 +52,7 @@ async function migrarDados() {
   function carregarJSON(nomeArquivo) {
     try {
       const caminhoCompleto = path.join(dataPath, nomeArquivo);
-      const dados = require(caminhoCompleto);
+      const dados = JSON.parse(fs.readFileSync(caminhoCompleto, 'utf-8'));
       return Array.isArray(dados) ? dados : [];
     } catch {
       return [];

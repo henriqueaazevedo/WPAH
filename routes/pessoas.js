@@ -1,4 +1,4 @@
-const { lerArquivo, salvarArquivo, gerarId } = require('../utils/storage');
+const { lerColecao, salvarColecao, gerarId } = require('../utils/mongoStorage');
 const { correspondeBusca, dentroDoPeriodo } = require('../utils/filtros');
 const auth = require('./auth');
 
@@ -10,13 +10,13 @@ function obterQuery(req) {
   return new URL(req.url, 'http://localhost').searchParams;
 }
 
-function listarPessoas(req, res) {
+async function listarPessoas(req, res) {
   const query = obterQuery(req);
   const termo = query.get('q') || '';
   const dataInicio = query.get('startDate') || '';
   const dataFim = query.get('endDate') || '';
 
-  const pessoas = lerArquivo(ARQUIVO).filter(pessoa => {
+  const pessoas = (await lerColecao('pessoas')).filter(pessoa => {
     return correspondeBusca(pessoa, termo, ['nome', 'cpf', 'email', 'telefone'])
       && dentroDoPeriodo(pessoa, ['dataNascimento', 'criadoEm'], dataInicio, dataFim);
   });
@@ -24,18 +24,18 @@ function listarPessoas(req, res) {
   responder(res, 200, pessoas);
 }
 
-function buscarPessoa(req, res, id) {
-  const pessoas = lerArquivo(ARQUIVO);
+async function buscarPessoa(req, res, id) {
+  const pessoas = await lerColecao('pessoas');
   const pessoa = pessoas.find(p => p.id === id);
   if (!pessoa) return responder(res, 404, { erro: 'Pessoa não encontrada' });
   responder(res, 200, pessoa);
 }
 
-function criarPessoa(req, res, body) {
+async function criarPessoa(req, res, body) {
   const { nome, cpf, email, telefone, dataNascimento, senha } = body;
   if (!nome || !cpf) return responder(res, 400, { erro: 'Nome e CPF são obrigatórios' });
 
-  const pessoas = lerArquivo(ARQUIVO);
+  const pessoas = await lerColecao('pessoas');
   const jaExiste = pessoas.find(p => String(p.cpf).replace(/\D/g, '') === String(cpf).replace(/\D/g, ''));
   if (jaExiste) return responder(res, 409, { erro: 'CPF já cadastrado' });
 
@@ -51,10 +51,10 @@ function criarPessoa(req, res, body) {
   };
 
   pessoas.push(novaPessoa);
-  salvarArquivo(ARQUIVO, pessoas);
+  await salvarColecao('pessoas', pessoas);
 
   try {
-    const { usuario, credenciais } = auth.criarUsuarioParaPessoa({
+    const { usuario, credenciais } = await auth.criarUsuarioParaPessoa({
       nome,
       email,
       cpf,
@@ -69,13 +69,13 @@ function criarPessoa(req, res, body) {
       usuario: auth.sanitizarUsuario(usuario)
     });
   } catch (erro) {
-    salvarArquivo(ARQUIVO, pessoas.filter(pessoa => pessoa.id !== novaPessoa.id));
+    await salvarColecao('pessoas', pessoas.filter(pessoa => pessoa.id !== novaPessoa.id));
     responder(res, 409, { erro: erro.message });
   }
 }
 
-function atualizarPessoa(req, res, id, body) {
-  const pessoas = lerArquivo(ARQUIVO);
+async function atualizarPessoa(req, res, id, body) {
+  const pessoas = await lerColecao('pessoas');
   const index = pessoas.findIndex(p => p.id === id);
   if (index === -1) return responder(res, 404, { erro: 'Pessoa não encontrada' });
 
@@ -96,7 +96,7 @@ function atualizarPessoa(req, res, id, body) {
   };
 
   try {
-    auth.atualizarUsuarioDaPessoa({
+    await auth.atualizarUsuarioDaPessoa({
       pessoaId: id,
       nome: pessoas[index].nome,
       email: pessoas[index].email
@@ -105,31 +105,31 @@ function atualizarPessoa(req, res, id, body) {
     return responder(res, 409, { erro: erro.message });
   }
 
-  salvarArquivo(ARQUIVO, pessoas);
+  await salvarColecao('pessoas', pessoas);
   responder(res, 200, pessoas[index]);
 }
 
-function deletarPessoa(req, res, id) {
-  const pessoas = lerArquivo(ARQUIVO);
+async function deletarPessoa(req, res, id) {
+  const pessoas = await lerColecao('pessoas');
   const index = pessoas.findIndex(p => p.id === id);
   if (index === -1) return responder(res, 404, { erro: 'Pessoa não encontrada' });
 
   const removida = pessoas.splice(index, 1)[0];
-  salvarArquivo(ARQUIVO, pessoas);
+  await salvarColecao('pessoas', pessoas);
 
-  auth.removerUsuarioDaPessoa(id);
+  await auth.removerUsuarioDaPessoa(id);
 
-  const documentos = lerArquivo(ARQUIVO_DOCUMENTOS).map(documento => {
+  const documentos = (await lerColecao('documentos')).map(documento => {
     if (documento.pessoaId !== id) return documento;
     return { ...documento, pessoaId: null, atualizadoEm: new Date().toISOString() };
   });
-  salvarArquivo(ARQUIVO_DOCUMENTOS, documentos);
+  await salvarColecao('documentos', documentos);
 
-  const protocolos = lerArquivo(ARQUIVO_PROTOCOLOS).map(protocolo => {
+  const protocolos = (await lerColecao('protocolos')).map(protocolo => {
     if (protocolo.pessoaId !== id) return protocolo;
     return { ...protocolo, pessoaId: null, atualizadoEm: new Date().toISOString() };
   });
-  salvarArquivo(ARQUIVO_PROTOCOLOS, protocolos);
+  await salvarColecao('protocolos', protocolos);
 
   responder(res, 200, { mensagem: 'Pessoa removida com sucesso', pessoa: removida });
 }

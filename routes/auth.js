@@ -1,4 +1,4 @@
-const { lerArquivo, salvarArquivo, gerarId } = require('../utils/storage');
+const { lerColecao, salvarColecao, gerarId } = require('../utils/mongoStorage');
 
 const ARQUIVO_USUARIOS = 'usuarios.json';
 const ARQUIVO_PESSOAS = 'pessoas.json';
@@ -15,20 +15,20 @@ function apenasDigitos(valor) {
   return String(valor || '').replace(/\D/g, '');
 }
 
-function lerUsuarios() {
-  return lerArquivo(ARQUIVO_USUARIOS);
+async function lerUsuarios() {
+  return lerColecao('usuarios');
 }
 
-function salvarUsuarios(usuarios) {
-  salvarArquivo(ARQUIVO_USUARIOS, usuarios);
+async function salvarUsuarios(usuarios) {
+  await salvarColecao('usuarios', usuarios);
 }
 
-function lerPessoas() {
-  return lerArquivo(ARQUIVO_PESSOAS);
+async function lerPessoas() {
+  return lerColecao('pessoas');
 }
 
-function salvarPessoas(pessoas) {
-  salvarArquivo(ARQUIVO_PESSOAS, pessoas);
+async function salvarPessoas(pessoas) {
+  await salvarColecao('pessoas', pessoas);
 }
 
 function sanitizarUsuario(usuario) {
@@ -65,8 +65,8 @@ function validarEmailUnico(usuarios, email, usuarioIdIgnorado) {
   }
 }
 
-function criarUsuarioParaPessoa({ nome, email, cpf, pessoaId, senha, origem }) {
-  const usuarios = lerUsuarios();
+async function criarUsuarioParaPessoa({ nome, email, cpf, pessoaId, senha, origem }) {
+  const usuarios = await lerUsuarios();
   validarEmailUnico(usuarios, email);
 
   const login = gerarLoginDisponivel(usuarios, nome, cpf);
@@ -84,7 +84,7 @@ function criarUsuarioParaPessoa({ nome, email, cpf, pessoaId, senha, origem }) {
   };
 
   usuarios.push(novoUsuario);
-  salvarUsuarios(usuarios);
+  await salvarUsuarios(usuarios);
 
   return {
     usuario: novoUsuario,
@@ -95,8 +95,8 @@ function criarUsuarioParaPessoa({ nome, email, cpf, pessoaId, senha, origem }) {
   };
 }
 
-function atualizarUsuarioDaPessoa({ pessoaId, nome, email }) {
-  const usuarios = lerUsuarios();
+async function atualizarUsuarioDaPessoa({ pessoaId, nome, email }) {
+  const usuarios = await lerUsuarios();
   const index = usuarios.findIndex(usuario => usuario.pessoaId === pessoaId);
   if (index === -1) return null;
 
@@ -109,28 +109,28 @@ function atualizarUsuarioDaPessoa({ pessoaId, nome, email }) {
     atualizadoEm: new Date().toISOString()
   };
 
-  salvarUsuarios(usuarios);
+  await salvarUsuarios(usuarios);
   return usuarios[index];
 }
 
-function removerUsuarioDaPessoa(pessoaId) {
-  const usuarios = lerUsuarios();
+async function removerUsuarioDaPessoa(pessoaId) {
+  const usuarios = await lerUsuarios();
   const index = usuarios.findIndex(usuario => usuario.pessoaId === pessoaId);
   if (index === -1) return null;
 
   const removido = usuarios.splice(index, 1)[0];
-  salvarUsuarios(usuarios);
+  await salvarUsuarios(usuarios);
   return removido;
 }
 
-function cadastrar(req, res, body) {
+async function cadastrar(req, res, body) {
   const { nome, email, cpf, senha, telefone, dataNascimento } = body;
 
   if (!nome || !email || !cpf || !senha) {
     return responder(res, 400, { erro: 'Nome, email, CPF e senha são obrigatórios' });
   }
 
-  const pessoas = lerPessoas();
+  const pessoas = await lerPessoas();
   const cpfNormalizado = apenasDigitos(cpf);
   const pessoaExistente = pessoas.find(pessoa => apenasDigitos(pessoa.cpf) === cpfNormalizado);
   if (pessoaExistente) {
@@ -149,10 +149,10 @@ function cadastrar(req, res, body) {
   };
 
   pessoas.push(novaPessoa);
-  salvarPessoas(pessoas);
+  await salvarPessoas(pessoas);
 
   try {
-    const { usuario } = criarUsuarioParaPessoa({
+    const { usuario } = await criarUsuarioParaPessoa({
       nome,
       email,
       cpf,
@@ -167,13 +167,13 @@ function cadastrar(req, res, body) {
       pessoa: novaPessoa
     });
   } catch (erro) {
-    const pessoasAtualizadas = lerPessoas().filter(pessoa => pessoa.id !== novaPessoa.id);
-    salvarPessoas(pessoasAtualizadas);
+    const pessoasAtualizadas = (await lerPessoas()).filter(pessoa => pessoa.id !== novaPessoa.id);
+    await salvarPessoas(pessoasAtualizadas);
     return responder(res, 409, { erro: erro.message });
   }
 }
 
-function login(req, res, body) {
+async function login(req, res, body) {
   const { acesso, email, login, senha } = body;
   const credencial = normalizarTexto(acesso || email || login);
 
@@ -181,7 +181,7 @@ function login(req, res, body) {
     return responder(res, 400, { erro: 'Login e senha são obrigatórios' });
   }
 
-  const usuarios = lerUsuarios();
+  const usuarios = await lerUsuarios();
   const usuario = usuarios.find(item => {
     const emailAtual = normalizarTexto(item.email);
     const loginAtual = normalizarTexto(item.login);
@@ -192,7 +192,7 @@ function login(req, res, body) {
     return responder(res, 401, { erro: 'Login ou senha inválidos' });
   }
 
-  const pessoas = lerPessoas();
+  const pessoas = await lerPessoas();
   const pessoa = pessoas.find(item => item.id === usuario.pessoaId) || null;
 
   responder(res, 200, {
@@ -204,17 +204,17 @@ function login(req, res, body) {
   });
 }
 
-function listarUsuarios(req, res) {
-  const usuarios = lerUsuarios();
+async function listarUsuarios(req, res) {
+  const usuarios = await lerUsuarios();
   responder(res, 200, usuarios.map(sanitizarUsuario));
 }
 
-function buscarPerfil(req, res, usuarioId) {
-  const usuarios = lerUsuarios();
+async function buscarPerfil(req, res, usuarioId) {
+  const usuarios = await lerUsuarios();
   const usuario = usuarios.find(item => item.id === usuarioId);
   if (!usuario) return responder(res, 404, { erro: 'Usuário não encontrado' });
 
-  const pessoas = lerPessoas();
+  const pessoas = await lerPessoas();
   const pessoa = pessoas.find(item => item.id === usuario.pessoaId) || null;
 
   responder(res, 200, {
@@ -223,12 +223,12 @@ function buscarPerfil(req, res, usuarioId) {
   });
 }
 
-function atualizarPerfil(req, res, usuarioId, body) {
-  const usuarios = lerUsuarios();
+async function atualizarPerfil(req, res, usuarioId, body) {
+  const usuarios = await lerUsuarios();
   const usuarioIndex = usuarios.findIndex(item => item.id === usuarioId);
   if (usuarioIndex === -1) return responder(res, 404, { erro: 'Usuário não encontrado' });
 
-  const pessoas = lerPessoas();
+  const pessoas = await lerPessoas();
   const pessoaIndex = pessoas.findIndex(item => item.id === usuarios[usuarioIndex].pessoaId);
   if (pessoaIndex === -1) return responder(res, 404, { erro: 'Pessoa vinculada não encontrada' });
 
@@ -256,8 +256,8 @@ function atualizarPerfil(req, res, usuarioId, body) {
     atualizadoEm: new Date().toISOString()
   };
 
-  salvarUsuarios(usuarios);
-  salvarPessoas(pessoas);
+  await salvarUsuarios(usuarios);
+  await salvarPessoas(pessoas);
 
   responder(res, 200, {
     mensagem: 'Perfil atualizado com sucesso',

@@ -1,4 +1,4 @@
-const { lerArquivo, salvarArquivo, gerarId } = require('../utils/storage');
+const { lerColecao, salvarColecao, gerarId } = require('../utils/mongoStorage');
 const { correspondeBusca, dentroDoPeriodo } = require('../utils/filtros');
 
 const ARQUIVO = 'protocolos.json';
@@ -14,13 +14,13 @@ function gerarNumeroProtocolo(lista) {
   return `PR-${ano}-${sequencial}`;
 }
 
-function listarProtocolos(req, res) {
+async function listarProtocolos(req, res) {
   const query = obterQuery(req);
   const termo = query.get('q') || '';
   const dataInicio = query.get('startDate') || '';
   const dataFim = query.get('endDate') || '';
 
-  const protocolos = lerArquivo(ARQUIVO).filter(protocolo => {
+  const protocolos = (await lerColecao('protocolos')).filter(protocolo => {
     return correspondeBusca(protocolo, termo, ['numero', 'titulo', 'tipo', 'situacao', 'descricao', 'conteudo'])
       && dentroDoPeriodo(protocolo, ['dataProtocolo', 'criadoEm', 'atualizadoEm'], dataInicio, dataFim);
   });
@@ -28,24 +28,24 @@ function listarProtocolos(req, res) {
   responder(res, 200, protocolos);
 }
 
-function buscarProtocolo(req, res, id) {
-  const protocolos = lerArquivo(ARQUIVO);
+async function buscarProtocolo(req, res, id) {
+  const protocolos = await lerColecao('protocolos');
   const protocolo = protocolos.find(item => item.id === id);
   if (!protocolo) return responder(res, 404, { erro: 'Protocolo não encontrado' });
   responder(res, 200, protocolo);
 }
 
-function criarProtocolo(req, res, body) {
+async function criarProtocolo(req, res, body) {
   const { titulo, tipo, descricao, pessoaId, conteudo, situacao, dataProtocolo } = body;
   if (!titulo || !tipo) return responder(res, 400, { erro: 'Título e tipo são obrigatórios' });
 
   if (pessoaId) {
-    const pessoas = lerArquivo(ARQUIVO_PESSOAS);
+    const pessoas = await lerColecao('pessoas');
     const pessoa = pessoas.find(item => item.id === pessoaId);
     if (!pessoa) return responder(res, 404, { erro: 'Pessoa não encontrada para vincular' });
   }
 
-  const protocolos = lerArquivo(ARQUIVO);
+  const protocolos = await lerColecao('protocolos');
   const novoProtocolo = {
     id: gerarId(protocolos),
     numero: gerarNumeroProtocolo(protocolos),
@@ -60,19 +60,19 @@ function criarProtocolo(req, res, body) {
   };
 
   protocolos.push(novoProtocolo);
-  salvarArquivo(ARQUIVO, protocolos);
+  await salvarColecao('protocolos', protocolos);
   responder(res, 201, novoProtocolo);
 }
 
-function atualizarProtocolo(req, res, id, body) {
-  const protocolos = lerArquivo(ARQUIVO);
+async function atualizarProtocolo(req, res, id, body) {
+  const protocolos = await lerColecao('protocolos');
   const index = protocolos.findIndex(item => item.id === id);
   if (index === -1) return responder(res, 404, { erro: 'Protocolo não encontrado' });
 
   const { titulo, tipo, descricao, pessoaId, conteudo, situacao, dataProtocolo } = body;
 
   if (pessoaId) {
-    const pessoas = lerArquivo(ARQUIVO_PESSOAS);
+    const pessoas = await lerColecao('pessoas');
     const pessoa = pessoas.find(item => item.id === pessoaId);
     if (!pessoa) return responder(res, 404, { erro: 'Pessoa não encontrada para vincular' });
   }
@@ -89,17 +89,17 @@ function atualizarProtocolo(req, res, id, body) {
     atualizadoEm: new Date().toISOString()
   };
 
-  salvarArquivo(ARQUIVO, protocolos);
+  await salvarColecao('protocolos', protocolos);
   responder(res, 200, protocolos[index]);
 }
 
-function deletarProtocolo(req, res, id) {
-  const protocolos = lerArquivo(ARQUIVO);
+async function deletarProtocolo(req, res, id) {
+  const protocolos = await lerColecao('protocolos');
   const index = protocolos.findIndex(item => item.id === id);
   if (index === -1) return responder(res, 404, { erro: 'Protocolo não encontrado' });
 
   const removido = protocolos.splice(index, 1)[0];
-  salvarArquivo(ARQUIVO, protocolos);
+  await salvarColecao('protocolos', protocolos);
   responder(res, 200, { mensagem: 'Protocolo removido com sucesso', protocolo: removido });
 }
 

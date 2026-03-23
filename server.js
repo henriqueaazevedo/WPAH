@@ -51,100 +51,100 @@ const server = http.createServer(async (req, res) => {
   try {
     if (partes[0] === 'cadastro' && method === 'POST') {
       const body = await lerBody(req);
-      return auth.cadastrar(req, res, body);
+      return await auth.cadastrar(req, res, body);
     }
 
     if (partes[0] === 'login' && method === 'POST') {
       const body = await lerBody(req);
-      return auth.login(req, res, body);
+      return await auth.login(req, res, body);
     }
 
     if (partes[0] === 'usuarios' && method === 'GET' && partes.length === 1) {
-      return auth.listarUsuarios(req, res);
+      return await auth.listarUsuarios(req, res);
     }
 
     if (partes[0] === 'perfil') {
       const id = extrairId(partes, 1);
       if (!id) return responderErro(res, 400, 'ID de usuário inválido');
 
-      if (method === 'GET') return auth.buscarPerfil(req, res, id);
+      if (method === 'GET') return await auth.buscarPerfil(req, res, id);
       if (method === 'PUT') {
         const body = await lerBody(req);
-        return auth.atualizarPerfil(req, res, id, body);
+        return await auth.atualizarPerfil(req, res, id, body);
       }
     }
 
     if (partes[0] === 'busca' && method === 'GET') {
-      return publico.buscar(req, res);
+      return await publico.buscar(req, res);
     }
 
     if (partes[0] === 'servicos' && method === 'GET') {
-      return publico.listarServicos(req, res);
+      return await publico.listarServicos(req, res);
     }
 
     if (partes[0] === 'transparencia' && method === 'GET') {
-      return publico.transparencia(req, res);
+      return await publico.transparencia(req, res);
     }
 
     if (partes[0] === 'pessoas') {
       const id = partes[1] ? extrairId(partes, 1) : null;
 
       if (method === 'GET' && id && partes[2] === 'documentos') {
-        return documentos.listarDocumentosDaPessoa(req, res, id);
+        return await documentos.listarDocumentosDaPessoa(req, res, id);
       }
 
-      if (method === 'GET' && !id) return pessoas.listarPessoas(req, res);
-      if (method === 'GET' && id) return pessoas.buscarPessoa(req, res, id);
+      if (method === 'GET' && !id) return await pessoas.listarPessoas(req, res);
+      if (method === 'GET' && id) return await pessoas.buscarPessoa(req, res, id);
 
       if (method === 'POST') {
         const body = await lerBody(req);
-        return pessoas.criarPessoa(req, res, body);
+        return await pessoas.criarPessoa(req, res, body);
       }
 
       if (method === 'PUT' && id) {
         const body = await lerBody(req);
-        return pessoas.atualizarPessoa(req, res, id, body);
+        return await pessoas.atualizarPessoa(req, res, id, body);
       }
 
-      if (method === 'DELETE' && id) return pessoas.deletarPessoa(req, res, id);
+      if (method === 'DELETE' && id) return await pessoas.deletarPessoa(req, res, id);
     }
 
     if (partes[0] === 'documentos') {
       const id = partes[1] ? extrairId(partes, 1) : null;
 
-      if (method === 'GET' && !id) return documentos.listarDocumentos(req, res);
-      if (method === 'GET' && id) return documentos.buscarDocumento(req, res, id);
+      if (method === 'GET' && !id) return await documentos.listarDocumentos(req, res);
+      if (method === 'GET' && id) return await documentos.buscarDocumento(req, res, id);
 
       if (method === 'POST') {
         const body = await lerBody(req);
-        return documentos.criarDocumento(req, res, body);
+        return await documentos.criarDocumento(req, res, body);
       }
 
       if (method === 'PUT' && id) {
         const body = await lerBody(req);
-        return documentos.atualizarDocumento(req, res, id, body);
+        return await documentos.atualizarDocumento(req, res, id, body);
       }
 
-      if (method === 'DELETE' && id) return documentos.deletarDocumento(req, res, id);
+      if (method === 'DELETE' && id) return await documentos.deletarDocumento(req, res, id);
     }
 
     if (partes[0] === 'protocolos') {
       const id = partes[1] ? extrairId(partes, 1) : null;
 
-      if (method === 'GET' && !id) return protocolos.listarProtocolos(req, res);
-      if (method === 'GET' && id) return protocolos.buscarProtocolo(req, res, id);
+      if (method === 'GET' && !id) return await protocolos.listarProtocolos(req, res);
+      if (method === 'GET' && id) return await protocolos.buscarProtocolo(req, res, id);
 
       if (method === 'POST') {
         const body = await lerBody(req);
-        return protocolos.criarProtocolo(req, res, body);
+        return await protocolos.criarProtocolo(req, res, body);
       }
 
       if (method === 'PUT' && id) {
         const body = await lerBody(req);
-        return protocolos.atualizarProtocolo(req, res, id, body);
+        return await protocolos.atualizarProtocolo(req, res, id, body);
       }
 
-      if (method === 'DELETE' && id) return protocolos.deletarProtocolo(req, res, id);
+      if (method === 'DELETE' && id) return await protocolos.deletarProtocolo(req, res, id);
     }
 
     if (pathname === '/' || pathname === '') {

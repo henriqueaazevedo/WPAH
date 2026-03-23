@@ -1,4 +1,4 @@
-const { lerArquivo, salvarArquivo, gerarId } = require('../utils/storage');
+const { lerColecao, salvarColecao, gerarId } = require('../utils/mongoStorage');
 const { correspondeBusca, dentroDoPeriodo } = require('../utils/filtros');
 
 const ARQUIVO = 'documentos.json';
@@ -8,13 +8,13 @@ function obterQuery(req) {
   return new URL(req.url, 'http://localhost').searchParams;
 }
 
-function listarDocumentos(req, res) {
+async function listarDocumentos(req, res) {
   const query = obterQuery(req);
   const termo = query.get('q') || '';
   const dataInicio = query.get('startDate') || '';
   const dataFim = query.get('endDate') || '';
 
-  const documentos = lerArquivo(ARQUIVO).filter(documento => {
+  const documentos = (await lerColecao('documentos')).filter(documento => {
     return correspondeBusca(documento, termo, ['titulo', 'tipo', 'descricao', 'conteudo'])
       && dentroDoPeriodo(documento, ['criadoEm', 'atualizadoEm'], dataInicio, dataFim);
   });
@@ -22,34 +22,34 @@ function listarDocumentos(req, res) {
   responder(res, 200, documentos);
 }
 
-function buscarDocumento(req, res, id) {
-  const documentos = lerArquivo(ARQUIVO);
+async function buscarDocumento(req, res, id) {
+  const documentos = await lerColecao('documentos');
   const doc = documentos.find(d => d.id === id);
   if (!doc) return responder(res, 404, { erro: 'Documento não encontrado' });
   responder(res, 200, doc);
 }
 
-function listarDocumentosDaPessoa(req, res, pessoaId) {
-  const pessoas = lerArquivo(ARQUIVO_PESSOAS);
+async function listarDocumentosDaPessoa(req, res, pessoaId) {
+  const pessoas = await lerColecao('pessoas');
   const pessoa = pessoas.find(p => p.id === pessoaId);
   if (!pessoa) return responder(res, 404, { erro: 'Pessoa não encontrada' });
 
-  const documentos = lerArquivo(ARQUIVO);
+  const documentos = await lerColecao('documentos');
   const docsDaPessoa = documentos.filter(d => d.pessoaId === pessoaId);
   responder(res, 200, docsDaPessoa);
 }
 
-function criarDocumento(req, res, body) {
+async function criarDocumento(req, res, body) {
   const { titulo, tipo, descricao, pessoaId, conteudo } = body;
   if (!titulo || !tipo) return responder(res, 400, { erro: 'Título e tipo são obrigatórios' });
 
   if (pessoaId) {
-    const pessoas = lerArquivo(ARQUIVO_PESSOAS);
+    const pessoas = await lerColecao('pessoas');
     const pessoa = pessoas.find(p => p.id === pessoaId);
     if (!pessoa) return responder(res, 404, { erro: 'Pessoa não encontrada para vincular' });
   }
 
-  const documentos = lerArquivo(ARQUIVO);
+  const documentos = await lerColecao('documentos');
   const novoDoc = {
     id: gerarId(documentos),
     titulo,
@@ -61,19 +61,19 @@ function criarDocumento(req, res, body) {
   };
 
   documentos.push(novoDoc);
-  salvarArquivo(ARQUIVO, documentos);
+  await salvarColecao('documentos', documentos);
   responder(res, 201, novoDoc);
 }
 
-function atualizarDocumento(req, res, id, body) {
-  const documentos = lerArquivo(ARQUIVO);
+async function atualizarDocumento(req, res, id, body) {
+  const documentos = await lerColecao('documentos');
   const index = documentos.findIndex(d => d.id === id);
   if (index === -1) return responder(res, 404, { erro: 'Documento não encontrado' });
 
   const { titulo, tipo, descricao, pessoaId, conteudo } = body;
 
   if (pessoaId) {
-    const pessoas = lerArquivo(ARQUIVO_PESSOAS);
+    const pessoas = await lerColecao('pessoas');
     const pessoa = pessoas.find(p => p.id === pessoaId);
     if (!pessoa) return responder(res, 404, { erro: 'Pessoa não encontrada para vincular' });
   }
@@ -88,17 +88,17 @@ function atualizarDocumento(req, res, id, body) {
     atualizadoEm: new Date().toISOString()
   };
 
-  salvarArquivo(ARQUIVO, documentos);
+  await salvarColecao('documentos', documentos);
   responder(res, 200, documentos[index]);
 }
 
-function deletarDocumento(req, res, id) {
-  const documentos = lerArquivo(ARQUIVO);
+async function deletarDocumento(req, res, id) {
+  const documentos = await lerColecao('documentos');
   const index = documentos.findIndex(d => d.id === id);
   if (index === -1) return responder(res, 404, { erro: 'Documento não encontrado' });
 
   const removido = documentos.splice(index, 1)[0];
-  salvarArquivo(ARQUIVO, documentos);
+  await salvarColecao('documentos', documentos);
   responder(res, 200, { mensagem: 'Documento removido com sucesso', documento: removido });
 }
 
