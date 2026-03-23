@@ -13,8 +13,19 @@ async function req(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(path, opts);
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.erro || 'Erro na requisição');
+
+  // Some endpoints may respond with an empty body (e.g. 204/empty error responses).
+  const raw = await res.text();
+  let data = {};
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = { erro: raw };
+    }
+  }
+
+  if (!res.ok) throw new Error(data.erro || `Erro na requisição (${res.status})`);
   return data;
 }
 
