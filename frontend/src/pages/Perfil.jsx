@@ -13,6 +13,24 @@ export default function Perfil() {
 
   useEffect(() => {
     async function carregar() {
+      // MARRETA MESTRE: Se for o ID Especial, carrega dados fixos de mestre
+      if (Number(usuarioLocal.id) === 999999) {
+        const dadosMestre = {
+          usuario: { id: 999999, login: 'super', nome: 'Henrique Azevedo (Super User)', role: 'super', email: 'contato@wpah.com.br' },
+          pessoa: { nome: 'Henrique Azevedo (Master)', cpf: '---.---.---.--', email: 'contato@wpah.com.br', telefone: '(00) 00000-0000', dataNascimento: '' }
+        };
+        setPerfil(dadosMestre);
+        setForm({
+          nome: dadosMestre.pessoa.nome,
+          email: dadosMestre.pessoa.email,
+          telefone: dadosMestre.pessoa.telefone,
+          dataNascimento: dadosMestre.pessoa.dataNascimento,
+          senha: ''
+        });
+        setCarregando(false);
+        return;
+      }
+
       setCarregando(true);
       try {
         const dados = await api.getPerfil(usuarioLocal.id);

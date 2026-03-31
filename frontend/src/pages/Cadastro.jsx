@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Eye, EyeOff } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { api } from '../api.js';
 
 export default function Cadastro() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ nome: '', email: '', cpf: '', telefone: '', dataNascimento: '', senha: '' });
-  const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   function handleChange(e) {
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -14,13 +16,14 @@ export default function Cadastro() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setErro('');
     setCarregando(true);
+    const toastId = toast.loading('Criando sua conta...');
     try {
       await api.cadastro(form);
-      navigate('/login');
+      toast.success('Conta criada com sucesso! Faça login para continuar.', { id: toastId });
+      setTimeout(() => navigate('/login'), 1500);
     } catch (err) {
-      setErro(err.message);
+      toast.error(err.message || 'Erro ao cadastrar. Verifique os dados fornecidos.', { id: toastId });
     } finally {
       setCarregando(false);
     }
@@ -41,8 +44,6 @@ export default function Cadastro() {
             <span className="mini-loader" />
           </div>
         )}
-
-        {erro && <div className="alerta alerta-erro">{erro}</div>}
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
@@ -105,18 +106,28 @@ export default function Cadastro() {
           </div>
           <div className="form-group">
             <label htmlFor="senha">Senha</label>
-            <input
-              id="senha"
-              name="senha"
-              type="password"
-              value={form.senha}
-              onChange={handleChange}
-              placeholder="Mínimo 6 caracteres"
-              required
-              minLength={6}
-            />
+            <div className="password-wrap">
+              <input
+                id="senha"
+                name="senha"
+                type={showPassword ? 'text' : 'password'}
+                value={form.senha}
+                onChange={handleChange}
+                placeholder="Mínimo 6 caracteres"
+                required
+                minLength={6}
+              />
+              <button 
+                type="button" 
+                className="password-toggle" 
+                onClick={() => setShowPassword(!showPassword)}
+                tabIndex="-1"
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
           </div>
-          <button type="submit" className="btn btn-primary" disabled={carregando}>
+          <button type="submit" className="btn btn-primary" style={{marginTop: '1.5rem'}} disabled={carregando}>
             {carregando ? <span className="spinner" /> : null}
             {carregando ? 'Cadastrando...' : 'Criar Conta'}
           </button>

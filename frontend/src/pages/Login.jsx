@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Eye, EyeOff } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { api } from '../api.js';
 
 export default function Login() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ acesso: '', senha: '' });
-  const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   function handleChange(e) {
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -14,14 +16,15 @@ export default function Login() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setErro('');
     setCarregando(true);
+    const toastId = toast.loading('Autenticando...');
     try {
       const res = await api.login(form);
       localStorage.setItem('usuario', JSON.stringify(res.usuario));
-      navigate('/pessoas');
+      toast.success('Bem-vindo ao sistema!', { id: toastId });
+      setTimeout(() => navigate('/inicio'), 500);
     } catch (err) {
-      setErro(err.message);
+      toast.error(err.message || 'Erro ao entrar. Verifique suas credenciais.', { id: toastId });
     } finally {
       setCarregando(false);
     }
@@ -43,8 +46,6 @@ export default function Login() {
           </div>
         )}
 
-        {erro && <div className="alerta alerta-erro">{erro}</div>}
-
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label htmlFor="acesso">E-mail ou login</label>
@@ -61,17 +62,27 @@ export default function Login() {
           </div>
           <div className="form-group">
             <label htmlFor="senha">Senha</label>
-            <input
-              id="senha"
-              name="senha"
-              type="password"
-              value={form.senha}
-              onChange={handleChange}
-              placeholder="••••••••"
-              required
-            />
+            <div className="password-wrap">
+              <input
+                id="senha"
+                name="senha"
+                type={showPassword ? 'text' : 'password'}
+                value={form.senha}
+                onChange={handleChange}
+                placeholder="••••••••"
+                required
+              />
+              <button 
+                type="button" 
+                className="password-toggle" 
+                onClick={() => setShowPassword(!showPassword)}
+                tabIndex="-1"
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
           </div>
-          <button type="submit" className="btn btn-primary" disabled={carregando}>
+          <button type="submit" className="btn btn-primary" style={{marginTop: '1.5rem'}} disabled={carregando}>
             {carregando ? <span className="spinner" /> : null}
             {carregando ? 'Entrando...' : 'Entrar'}
           </button>

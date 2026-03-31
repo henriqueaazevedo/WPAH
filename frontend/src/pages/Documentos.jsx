@@ -3,6 +3,16 @@ import { api } from '../api.js';
 import Modal from '../components/Modal.jsx';
 import LoadingBlock from '../components/LoadingBlock.jsx';
 import Pagination from '../components/Pagination.jsx';
+import toast from 'react-hot-toast';
+import { 
+  FilePlus, 
+  Search, 
+  Trash2, 
+  Edit3, 
+  Eye as EyeIcon, 
+  FileText,
+  Filter
+} from 'lucide-react';
 
 const TIPOS = ['Lei', 'Contrato', 'Ofício', 'Certidão', 'Relatório', 'Portaria', 'Decreto', 'Outros'];
 const FORM_VAZIO = { titulo: '', tipo: '', descricao: '', pessoaId: '', conteudo: '' };
@@ -18,11 +28,16 @@ export default function Documentos() {
   const [modalEdicaoAberto, setModalEdicaoAberto] = useState(false);
   const [modalExclusaoDocumento, setModalExclusaoDocumento] = useState(null);
   const [selecionado, setSelecionado] = useState(null);
-  const [erro, setErro] = useState('');
-  const [msg, setMsg] = useState('');
   const [carregando, setCarregando] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [paginaAtual, setPaginaAtual] = useState(1);
+
+  const usuarioLogado = JSON.parse(localStorage.getItem('usuario') || '{}');
+  const userRole = String(usuarioLogado.role || '').toLowerCase();
+  const userLogin = String(usuarioLogado.login || '').toLowerCase();
+  // REGRA SUPREMA: Acesso total apenas para 'super'.
+  const isSuper = userLogin === 'super' || userRole === 'super';
+  const isAdmin = isSuper || userRole === 'admin' || userLogin === 'admin';
 
   const listaPaginada = useMemo(() => {
     const inicio = (paginaAtual - 1) * PAGE_SIZE;
@@ -50,7 +65,7 @@ export default function Documentos() {
       setLista(documentos);
       setPessoas(pessoasData);
     } catch (e) {
-      setErro(e.message);
+      toast.error('Erro ao carregar dados: ' + e.message);
     } finally {
       setCarregando(false);
     }
@@ -62,7 +77,7 @@ export default function Documentos() {
       setLista(await api.getDocumentos(params));
       setPaginaAtual(1);
     } catch (e) {
-      setErro(e.message);
+      toast.error('Erro ao listar documentos: ' + e.message);
     } finally {
       setCarregando(false);
     }
@@ -90,7 +105,7 @@ export default function Documentos() {
   async function handleSubmit(e) {
     e.preventDefault();
     setEnviando(true);
-    setErro('');
+    const toastId = toast.loading(editandoId ? 'Atualizando...' : 'Cadastrando...');
 
     try {
       const payload = {
@@ -99,10 +114,10 @@ export default function Documentos() {
       };
       if (editandoId) {
         await api.atualizarDocumento(editandoId, payload);
-        setMsg('Documento atualizado com sucesso.');
+        toast.success('Documento atualizado com sucesso.', { id: toastId });
       } else {
         await api.criarDocumento(payload);
-        setMsg('Documento cadastrado com sucesso.');
+        toast.success('Documento cadastrado com sucesso.', { id: toastId });
       }
       setForm(FORM_VAZIO);
       setEditandoId(null);
@@ -110,7 +125,7 @@ export default function Documentos() {
       setModalEdicaoAberto(false);
       listar();
     } catch (e) {
-      setErro(e.message);
+      toast.error(e.message, { id: toastId });
     } finally {
       setEnviando(false);
     }
@@ -130,13 +145,14 @@ export default function Documentos() {
 
   async function confirmarExclusao() {
     if (!modalExclusaoDocumento) return;
+    const toastId = toast.loading('Excluindo...');
     try {
       await api.deletarDocumento(modalExclusaoDocumento.id);
-      setMsg('Documento removido com sucesso.');
+      toast.success('Documento removido com sucesso.', { id: toastId });
       setModalExclusaoDocumento(null);
       listar();
     } catch (e) {
-      setErro(e.message);
+      toast.error(e.message, { id: toastId });
     }
   }
 
@@ -153,26 +169,26 @@ export default function Documentos() {
           <h1 className="page-title">Leis e Documentos</h1>
           <p className="page-subtitle">Documentos administrativos com busca por período e conteúdo.</p>
         </div>
-        {!mostrarForm && <button className="btn btn-primary" onClick={() => setMostrarForm(true)}>+ Novo Documento</button>}
+        {!mostrarForm && isAdmin && (
+          <button className="btn btn-primary" onClick={() => setMostrarForm(true)}>
+            <FilePlus size={18} /> Novo Documento
+          </button>
+        )}
       </div>
 
-      {msg && <div className="alerta alerta-sucesso">{msg}</div>}
-      {erro && <div className="alerta alerta-erro">{erro}</div>}
-
       <div className="card">
-        <h2 className="card-title">Filtros da sessão</h2>
+        <h2 className="card-title"><Filter size={18} style={{verticalAlign: 'middle', marginRight: '8px'}} /> Filtros de busca</h2>
         <form className="filter-bar" onSubmit={aplicarFiltros}>
           <input name="q" value={filtros.q} onChange={handleFiltroChange} placeholder="Buscar por título, tipo, descrição ou conteúdo" />
           <input name="startDate" type="date" value={filtros.startDate} onChange={handleFiltroChange} />
           <input name="endDate" type="date" value={filtros.endDate} onChange={handleFiltroChange} />
-          <button className="btn btn-primary" type="submit">Filtrar</button>
+          <button className="btn btn-primary" type="submit"><Search size={16} /> Filtrar</button>
           <button className="btn btn-secondary" type="button" onClick={limparFiltros}>Limpar</button>
         </form>
       </div>
 
-      {mostrarForm && (
-        <div className="card">
-          <h2 className="card-title">{editandoId ? 'Editar documento' : 'Cadastrar novo documento'}</h2>
+      {/* MODAL DE CADASTRO / EDIÇÃO UNIFICADO */}
+      <Modal aberto={mostrarForm || modalEdicaoAberto} titulo={editandoId ? 'Editar Documento' : 'Cadastrar Novo Documento'} onClose={() => { setMostrarForm(false); setModalEdicaoAberto(false); setEditandoId(null); setForm(FORM_VAZIO); }}>
           <form onSubmit={handleSubmit}>
             <div className="form-grid">
               <div className="form-group">
@@ -188,27 +204,29 @@ export default function Documentos() {
               </div>
               <div className="form-group">
                 <label>Pessoa vinculada</label>
-                <select name="pessoaId" value={form.pessoaId} onChange={handleChange}>
+                <select name="pessoaId" value={form.pessoaId} onChange={handleChange} style={{paddingRight: '2rem'}}>
                   <option value="">Nenhuma</option>
                   {pessoas.map(pessoa => <option key={pessoa.id} value={pessoa.id}>{pessoa.nome}</option>)}
                 </select>
               </div>
-              <div className="form-group full">
+              <div className="form-group" style={{gridColumn: '1 / -1'}}>
                 <label>Descrição</label>
                 <input name="descricao" value={form.descricao} onChange={handleChange} />
               </div>
-              <div className="form-group full">
+              <div className="form-group" style={{gridColumn: '1 / -1'}}>
                 <label>Conteúdo</label>
-                <textarea name="conteudo" value={form.conteudo} onChange={handleChange} rows={6} />
+                <textarea name="conteudo" value={form.conteudo} onChange={handleChange} rows={5} />
               </div>
             </div>
-            <div className="form-actions">
-              <button className="btn btn-primary" type="submit" disabled={enviando}>{enviando ? <span className="spinner" /> : null}{editandoId ? 'Salvar alterações' : 'Cadastrar documento'}</button>
-              <button className="btn btn-secondary" type="button" onClick={() => { setMostrarForm(false); setEditandoId(null); setForm(FORM_VAZIO); }}>Cancelar</button>
+            <div className="form-actions" style={{justifyContent: 'flex-end', marginTop: '1.5rem'}}>
+              <button className="btn btn-secondary" type="button" onClick={() => { setMostrarForm(false); setModalEdicaoAberto(false); setEditandoId(null); setForm(FORM_VAZIO); }}>Cancelar</button>
+              <button className="btn btn-primary" type="submit" disabled={enviando}>
+                {enviando ? <span className="spinner" /> : null}
+                {editandoId ? 'Salvar Alterações' : 'Cadastrar Documento'}
+              </button>
             </div>
           </form>
-        </div>
-      )}
+      </Modal>
 
       <div className="card">
         <h2 className="card-title">Documentos cadastrados {!carregando && <span className="badge registro-badge">{lista.length} registros</span>}</h2>
@@ -241,9 +259,13 @@ export default function Documentos() {
                     <td>{documento.criadoEm ? new Date(documento.criadoEm).toLocaleDateString('pt-BR') : '—'}</td>
                     <td>
                       <div className="td-actions">
-                        <button className="btn btn-secondary btn-sm btn-icon" title="Ver" onClick={() => setSelecionado(documento)}>◉</button>
-                        <button className="btn btn-secondary btn-sm btn-icon" title="Editar" onClick={() => editar(documento)}>✎</button>
-                        <button className="btn btn-danger btn-sm btn-icon" title="Excluir" onClick={() => setModalExclusaoDocumento(documento)}>✕</button>
+                        <button className="btn btn-secondary btn-sm btn-icon" title="Ver" onClick={() => setSelecionado(documento)}><EyeIcon size={16} /></button>
+                        {(isAdmin || isSuper) && (
+                          <>
+                            <button className="btn btn-secondary btn-sm btn-icon" title="Editar" onClick={() => editar(documento)}><Edit3 size={16} /></button>
+                            <button className="btn btn-danger btn-sm btn-icon" title="Excluir" onClick={() => setModalExclusaoDocumento(documento)}><Trash2 size={16} /></button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -260,71 +282,43 @@ export default function Documentos() {
         )}
       </div>
 
-      <Modal aberto={!!selecionado} titulo="Conteúdo do documento" onClose={() => setSelecionado(null)}>
+      <Modal aberto={!!selecionado} titulo="Visualizar Documento" onClose={() => setSelecionado(null)}>
         {selecionado && (
           <div className="detail-grid">
-            <p><strong>Título:</strong> {selecionado.titulo}</p>
-            <p><strong>Tipo:</strong> {selecionado.tipo}</p>
+            <div style={{display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', padding: '1rem', background: '#f8fafc', borderRadius: '4px'}}>
+               <FileText size={40} color="#164b80" />
+               <div>
+                  <h3 style={{margin: 0}}>{selecionado.titulo}</h3>
+                  <span className="badge badge-tipo">{selecionado.tipo}</span>
+               </div>
+            </div>
             <p><strong>Pessoa vinculada:</strong> {nomePessoa(selecionado.pessoaId)}</p>
             <p><strong>Descrição:</strong> {selecionado.descricao || '—'}</p>
-            <div className="detail-text-block">
-              <strong>Conteúdo</strong>
-              <p>{selecionado.conteudo || 'Sem conteúdo registrado.'}</p>
-            </div>
+            {(isAdmin || isSuper) && (
+              <div style={{marginTop: '1.5rem', display: 'flex', gap: '1rem'}}>
+                <button className="btn btn-primary" onClick={() => { editar(selecionado); setSelecionado(null); }}>
+                  <Edit3 size={16} /> Editar este Documento
+                </button>
+              </div>
+            )}
           </div>
         )}
       </Modal>
 
-      <Modal aberto={modalEdicaoAberto} titulo="Editar documento" onClose={() => { setModalEdicaoAberto(false); setEditandoId(null); setForm(FORM_VAZIO); }}>
-        <form onSubmit={handleSubmit}>
-          <div className="form-grid">
-            <div className="form-group">
-              <label>Título *</label>
-              <input name="titulo" value={form.titulo} onChange={handleChange} required />
-            </div>
-            <div className="form-group">
-              <label>Tipo *</label>
-              <select name="tipo" value={form.tipo} onChange={handleChange} required>
-                <option value="">Selecione</option>
-                {TIPOS.map(tipo => <option key={tipo} value={tipo}>{tipo}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Pessoa vinculada</label>
-              <select name="pessoaId" value={form.pessoaId} onChange={handleChange}>
-                <option value="">Nenhuma</option>
-                {pessoas.map(pessoa => <option key={pessoa.id} value={pessoa.id}>{pessoa.nome}</option>)}
-              </select>
-            </div>
-            <div className="form-group full">
-              <label>Descrição</label>
-              <input name="descricao" value={form.descricao} onChange={handleChange} />
-            </div>
-            <div className="form-group full">
-              <label>Conteúdo</label>
-              <textarea name="conteudo" value={form.conteudo} onChange={handleChange} rows={6} />
-            </div>
-          </div>
-          <div className="form-actions">
-            <button className="btn btn-primary" type="submit" disabled={enviando}>{enviando ? <span className="spinner" /> : null}Salvar alterações</button>
-            <button className="btn btn-secondary" type="button" onClick={() => { setModalEdicaoAberto(false); setEditandoId(null); setForm(FORM_VAZIO); }}>Cancelar</button>
-          </div>
-        </form>
-      </Modal>
 
-      <Modal aberto={!!modalExclusaoDocumento} titulo="Confirmar exclusão" onClose={() => setModalExclusaoDocumento(null)}>
+      <Modal aberto={!!modalExclusaoDocumento} titulo="Confirmar Exclusão" onClose={() => setModalExclusaoDocumento(null)}>
         {modalExclusaoDocumento && (
           <div className="detail-grid">
-            <p>Confirma excluir <strong>{modalExclusaoDocumento.titulo}</strong>?</p>
-            <div className="form-actions">
-              <button className="btn btn-danger" type="button" onClick={confirmarExclusao}>Excluir</button>
+            <p>Você tem certeza que deseja excluir o documento <strong>{modalExclusaoDocumento.titulo}</strong>?</p>
+            <div className="form-actions" style={{justifyContent: 'flex-end', marginTop: '1rem'}}>
               <button className="btn btn-secondary" type="button" onClick={() => setModalExclusaoDocumento(null)}>Cancelar</button>
+              <button className="btn btn-danger" type="button" onClick={confirmarExclusao}>Excluir Documento</button>
             </div>
           </div>
         )}
       </Modal>
 
-      <footer className="rodape">WPAH © {new Date().getFullYear()} — Leis e Documentos</footer>
+      <footer className="rodape">WPAH © {new Date().getFullYear()} — Secretaria Digital</footer>
     </div>
   );
 }

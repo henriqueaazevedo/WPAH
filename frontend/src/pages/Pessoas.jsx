@@ -3,20 +3,40 @@ import { api } from '../api.js';
 import Modal from '../components/Modal.jsx';
 import LoadingBlock from '../components/LoadingBlock.jsx';
 import Pagination from '../components/Pagination.jsx';
+import toast from 'react-hot-toast';
+import { 
+  UserPlus, 
+  Search, 
+  Trash2, 
+  Edit3, 
+  Eye as EyeIcon, 
+  Clock, 
+  ShieldCheck, 
+  User as UserIcon,
+  Filter
+} from 'lucide-react';
 
 const FORM_VAZIO = {
   nome: '',
   cpf: '',
+  rg: '', // Novo campo básico
   email: '',
   telefone: '',
   dataNascimento: '',
-  senha: ''
+  statusSigiloso: '', // Campo Super User
+  obsSigilosa: ''      // Campo Super User
 };
 
 function formatarData(valor) {
   if (!valor) return '—';
-  const data = new Date(String(valor).includes('T') ? valor : `${valor}T00:00:00`);
-  return data.toLocaleDateString('pt-BR');
+  const data = new Date(valor);
+  return isNaN(data.getTime()) ? '—' : data.toLocaleDateString('pt-BR');
+}
+
+function formatarDataHora(valor) {
+  if (!valor) return '—';
+  const data = new Date(valor);
+  return isNaN(data.getTime()) ? '—' : data.toLocaleString('pt-BR');
 }
 
 export default function Pessoas() {
@@ -30,16 +50,39 @@ export default function Pessoas() {
   const [modalExclusaoPessoa, setModalExclusaoPessoa] = useState(null);
   const [selecionada, setSelecionada] = useState(null);
   const [credenciaisGeradas, setCredenciaisGeradas] = useState(null);
-  const [erro, setErro] = useState('');
-  const [msg, setMsg] = useState('');
   const [carregando, setCarregando] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [paginaAtual, setPaginaAtual] = useState(1);
 
+  const usuarioLogado = JSON.parse(localStorage.getItem('usuario') || '{}');
+  const userRole = String(usuarioLogado.role || '').toLowerCase();
+  const userLogin = String(usuarioLogado.login || '').toLowerCase();
+  const userName = String(usuarioLogado.nome || '').toLowerCase();
+  
+  // REGRA SUPREMA: Acesso total apenas para 'super'.
+  const isSuper = userLogin === 'super' || userRole === 'super';
+  const isAdmin = isSuper || userRole === 'admin' || userLogin === 'admin';
+  const isUserComum = !isAdmin && !isSuper;
+
+  const listaFiltrada = useMemo(() => {
+    if (isSuper) return lista;
+    
+    // Se for User comum, ele só vê a si próprio
+    if (isUserComum) {
+      return lista.filter(p => p.id === usuarioLogado.pessoaId || p.cpf === usuarioLogado.cpf);
+    }
+
+    // Se for Admin, ele vê todos (menos o Super User)
+    return lista.filter(p => {
+      const eSuper = p.role === 'super' || p.usuario?.role === 'super' || p.login === 'super' || p.usuario?.login === 'super';
+      return !eSuper;
+    });
+  }, [lista, isSuper, isUserComum, usuarioLogado]);
+
   const listaPaginada = useMemo(() => {
     const inicio = (paginaAtual - 1) * PAGE_SIZE;
-    return lista.slice(inicio, inicio + PAGE_SIZE);
-  }, [lista, paginaAtual]);
+    return listaFiltrada.slice(inicio, inicio + PAGE_SIZE);
+  }, [listaFiltrada, paginaAtual]);
 
   useEffect(() => {
     const totalPaginas = Math.max(1, Math.ceil(lista.length / PAGE_SIZE));
@@ -59,7 +102,7 @@ export default function Pessoas() {
       setLista(dados);
       setPaginaAtual(1);
     } catch (e) {
-      setErro(e.message);
+      toast.error('Erro ao carregar pessoas: ' + e.message);
     } finally {
       setCarregando(false);
     }
@@ -86,17 +129,16 @@ export default function Pessoas() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setErro('');
-    setMsg('');
     setEnviando(true);
+    const toastId = toast.loading(editandoId ? 'Atualizando...' : 'Cadastrando...');
 
     try {
       if (editandoId) {
         await api.atualizarPessoa(editandoId, form);
-        setMsg('Pessoa atualizada com sucesso.');
+        toast.success('Pessoa atualizada com sucesso.', { id: toastId });
       } else {
         const resposta = await api.criarPessoa(form);
-        setMsg('Pessoa cadastrada com sucesso.');
+        toast.success('Pessoa cadastrada com sucesso.', { id: toastId });
         if (resposta.acesso) {
           setCredenciaisGeradas({
             nome: resposta.nome,
@@ -109,7 +151,7 @@ export default function Pessoas() {
       cancelar();
       listar();
     } catch (e) {
-      setErro(e.message);
+      toast.error(e.message, { id: toastId });
     } finally {
       setEnviando(false);
     }
@@ -119,10 +161,12 @@ export default function Pessoas() {
     setForm({
       nome: pessoa.nome,
       cpf: pessoa.cpf,
+      rg: pessoa.rg || '',
       email: pessoa.email || '',
       telefone: pessoa.telefone || '',
       dataNascimento: pessoa.dataNascimento || '',
-      senha: ''
+      statusSigiloso: pessoa.statusSigiloso || '',
+      obsSigilosa: pessoa.obsSigilosa || ''
     });
     setEditandoId(pessoa.id);
     setModalEdicaoAberto(true);
@@ -130,13 +174,14 @@ export default function Pessoas() {
 
   async function confirmarExclusao() {
     if (!modalExclusaoPessoa) return;
+    const toastId = toast.loading('Excluindo...');
     try {
       await api.deletarPessoa(modalExclusaoPessoa.id);
-      setMsg('Pessoa removida com sucesso.');
+      toast.success('Pessoa removida com sucesso.', { id: toastId });
       setModalExclusaoPessoa(null);
       listar();
     } catch (e) {
-      setErro(e.message);
+      toast.error(e.message, { id: toastId });
     }
   }
 
@@ -154,30 +199,26 @@ export default function Pessoas() {
           <h1 className="page-title">Gestão de Pessoas</h1>
           <p className="page-subtitle">Cadastro completo com geração automática de acesso.</p>
         </div>
-        {!mostrarForm && (
+        {!mostrarForm && isAdmin && (
           <button className="btn btn-primary" onClick={() => { setEditandoId(null); setForm(FORM_VAZIO); setMostrarForm(true); }}>
-            + Nova Pessoa
+            <UserPlus size={18} /> Nova Pessoa
           </button>
         )}
       </div>
 
-      {msg && <div className="alerta alerta-sucesso">{msg}</div>}
-      {erro && <div className="alerta alerta-erro">{erro}</div>}
-
       <div className="card">
-        <h2 className="card-title">Filtros da sessão</h2>
+        <h2 className="card-title"><Filter size={18} style={{verticalAlign: 'middle', marginRight: '8px'}} /> Filtros de busca</h2>
         <form className="filter-bar" onSubmit={aplicarFiltros}>
           <input name="q" value={filtros.q} onChange={handleFiltroChange} placeholder="Buscar por nome, CPF, e-mail ou telefone" />
           <input name="startDate" type="date" value={filtros.startDate} onChange={handleFiltroChange} />
           <input name="endDate" type="date" value={filtros.endDate} onChange={handleFiltroChange} />
-          <button className="btn btn-primary" type="submit">Filtrar</button>
+          <button className="btn btn-primary" type="submit"><Search size={16} /> Filtrar</button>
           <button className="btn btn-secondary" type="button" onClick={limparFiltros}>Limpar</button>
         </form>
       </div>
 
-      {mostrarForm && (
-        <div className="card">
-          <h2 className="card-title">{editandoId ? 'Editar pessoa' : 'Cadastrar nova pessoa'}</h2>
+      {/* MODAL DE CADASTRO / EDIÇÃO UNIFICADO */}
+      <Modal aberto={mostrarForm || modalEdicaoAberto} titulo={editandoId ? 'Editar Pessoa' : 'Cadastrar Nova Pessoa'} onClose={cancelar}>
           <form onSubmit={handleSubmit}>
             <div className="form-grid">
               <div className="form-group">
@@ -187,6 +228,10 @@ export default function Pessoas() {
               <div className="form-group">
                 <label>CPF *</label>
                 <input name="cpf" value={form.cpf} onChange={handleChange} required />
+              </div>
+              <div className="form-group">
+                <label>RG</label>
+                <input name="rg" value={form.rg} onChange={handleChange} />
               </div>
               <div className="form-group">
                 <label>E-mail</label>
@@ -200,21 +245,45 @@ export default function Pessoas() {
                 <label>Data de nascimento</label>
                 <input name="dataNascimento" type="date" value={form.dataNascimento} onChange={handleChange} />
               </div>
-              <div className="form-group">
-                <label>Senha inicial {editandoId ? '(opcional)' : '(opcional)'}</label>
-                <input name="senha" type="text" value={form.senha} onChange={handleChange} placeholder="Se vazio, usa os 6 últimos dígitos do CPF" />
-              </div>
+              
+              {!editandoId && (
+                <div className="form-group">
+                   <label>Senha Inicial (opcional)</label>
+                   <input name="senha" type="password" value={form.senha} onChange={handleChange} placeholder="6 dígitos do CPF por padrão" />
+                </div>
+              )}
+
+              {isSuper && (
+                <>
+                  <div style={{gridColumn: '1 / -1', padding: '10px', background: '#f0fdf4', borderRadius: '4px', border: '1px solid #dcfce7', marginBottom: '10px'}}>
+                     <h4 style={{fontSize: '0.85rem', color: '#166534', margin: '0 0 8px 0'}}>🔒 Dados Privados (Exclusivo Super User)</h4>
+                     <div className="form-grid" style={{marginTop: '10px'}}>
+                        <div className="form-group">
+                           <label>Status Especial</label>
+                           <select name="statusSigiloso" value={form.statusSigiloso} onChange={handleChange}>
+                              <option value="Normal">Normal</option>
+                              <option value="Observação">Em Observação</option>
+                              <option value="Restrito">Restrito</option>
+                           </select>
+                        </div>
+                        <div className="form-group">
+                           <label>Nível de Auditoria</label>
+                           <input name="obsSigilosa" value={form.obsSigilosa} onChange={handleChange} placeholder="Notas do Super User" />
+                        </div>
+                     </div>
+                  </div>
+                </>
+              )}
             </div>
-            <div className="form-actions">
+            <div className="form-actions" style={{justifyContent: 'flex-end', marginTop: '1.5rem'}}>
+              <button className="btn btn-secondary" type="button" onClick={cancelar}>Cancelar</button>
               <button className="btn btn-primary" type="submit" disabled={enviando}>
                 {enviando ? <span className="spinner" /> : null}
-                {editandoId ? 'Salvar alterações' : 'Cadastrar pessoa'}
+                {editandoId ? 'Salvar Alterações' : 'Cadastrar Pessoa'}
               </button>
-              <button className="btn btn-secondary" type="button" onClick={cancelar}>Cancelar</button>
             </div>
           </form>
-        </div>
-      )}
+      </Modal>
 
       <div className="card">
         <h2 className="card-title">
@@ -232,11 +301,11 @@ export default function Pessoas() {
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>Nome</th>
-                  <th>CPF</th>
-                  <th>E-mail</th>
-                  <th>Telefone</th>
-                  <th>Nascimento</th>
+                   <th>Nome</th>
+                   <th>CPF</th>
+                   <th>E-mail</th>
+                   <th>Último Acesso</th>
+                   <th>Nascimento</th>
                   <th>Ações</th>
                 </tr>
               </thead>
@@ -244,16 +313,20 @@ export default function Pessoas() {
                 {listaPaginada.map(pessoa => (
                   <tr key={pessoa.id}>
                     <td><span className="badge">{pessoa.id}</span></td>
-                    <td><strong>{pessoa.nome}</strong></td>
-                    <td>{pessoa.cpf}</td>
-                    <td>{pessoa.email || <span className="muted">—</span>}</td>
-                    <td>{pessoa.telefone || <span className="muted">—</span>}</td>
-                    <td>{formatarData(pessoa.dataNascimento)}</td>
+                     <td><strong>{pessoa.nome}</strong></td>
+                     <td>{pessoa.cpf}</td>
+                     <td>{pessoa.email || <span className="muted">—</span>}</td>
+                     <td style={{fontSize: '0.85rem'}}>{formatarDataHora(pessoa.usuario?.ultimoAcesso || pessoa.ultimoAcesso)}</td>
+                     <td>{formatarData(pessoa.dataNascimento)}</td>
                     <td>
                       <div className="td-actions">
-                        <button className="btn btn-secondary btn-sm btn-icon" title="Ver" onClick={() => setSelecionada(pessoa)}>◉</button>
-                        <button className="btn btn-secondary btn-sm btn-icon" title="Editar" onClick={() => handleEditar(pessoa)}>✎</button>
-                        <button className="btn btn-danger btn-sm btn-icon" title="Excluir" onClick={() => setModalExclusaoPessoa(pessoa)}>✕</button>
+                        <button className="btn btn-secondary btn-sm btn-icon" title="Ver" onClick={() => setSelecionada(pessoa)}><EyeIcon size={16} /></button>
+                        {(isAdmin || isSuper) && (
+                          <>
+                            <button className="btn btn-secondary btn-sm btn-icon" title="Editar" onClick={() => handleEditar(pessoa)}><Edit3 size={16} /></button>
+                            <button className="btn btn-danger btn-sm btn-icon" title="Excluir" onClick={() => setModalExclusaoPessoa(pessoa)}><Trash2 size={16} /></button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -262,7 +335,7 @@ export default function Pessoas() {
             </table>
             <Pagination
               currentPage={paginaAtual}
-              totalItems={lista.length}
+              totalItems={listaFiltrada.length}
               pageSize={PAGE_SIZE}
               onChange={setPaginaAtual}
             />
@@ -270,77 +343,96 @@ export default function Pessoas() {
         )}
       </div>
 
-      <Modal aberto={!!selecionada} titulo="Detalhes da pessoa" onClose={() => setSelecionada(null)}>
+      <Modal aberto={!!selecionada} titulo="Detalhes da Pessoa" onClose={() => setSelecionada(null)}>
         {selecionada && (
           <div className="detail-grid">
-            <p><strong>Nome:</strong> {selecionada.nome}</p>
-            <p><strong>CPF:</strong> {selecionada.cpf}</p>
-            <p><strong>E-mail:</strong> {selecionada.email || '—'}</p>
-            <p><strong>Telefone:</strong> {selecionada.telefone || '—'}</p>
-            <p><strong>Nascimento:</strong> {formatarData(selecionada.dataNascimento)}</p>
-            <p><strong>Cadastro:</strong> {formatarData(selecionada.criadoEm)}</p>
+            <div className="profile-card-inicio" style={{gridTemplateColumns: '80px 1fr'}}>
+              <div className="profile-avatar-placeholder" style={{width: '80px', height: '80px'}}>
+                <UserIcon size={32} />
+              </div>
+              <div className="profile-info-grid" style={{gridTemplateColumns: '1fr 1fr'}}>
+                <div className="profile-info-item">
+                  <label>Nome</label>
+                  <span style={{fontSize: '1.1rem', color: 'var(--primary)'}}>{selecionada.nome}</span>
+                </div>
+                <div className="profile-info-item">
+                  <label>CPF</label>
+                  <span>{selecionada.cpf}</span>
+                </div>
+                {selecionada.rg && (
+                   <div className="profile-info-item">
+                      <label>RG</label>
+                      <span>{selecionada.rg}</span>
+                   </div>
+                )}
+                <div className="profile-info-item">
+                  <label>E-mail</label>
+                  <span>{selecionada.email || '—'}</span>
+                </div>
+                <div className="profile-info-item">
+                  <label>Telefone</label>
+                  <span>{selecionada.telefone || '—'}</span>
+                </div>
+                <div className="profile-info-item">
+                  <label>Nascimento</label>
+                  <span>{formatarData(selecionada.dataNascimento)}</span>
+                </div>
+                <div className="profile-info-item">
+                  <label>Cadastro em</label>
+                  <span>{formatarData(selecionada.criadoEm)}</span>
+                </div>
+                {isAdmin && selecionada.usuario && (
+                   <div className="profile-info-item" style={{gridColumn: '1 / -1', marginTop: '8px', padding: '8px', background: '#f8fafc', borderRadius: '4px'}}>
+                      <label><Clock size={12} /> Último Acesso</label>
+                      <span>{formatarData(selecionada.usuario.ultimoAcesso)}</span>
+                   </div>
+                )}
+              </div>
+            </div>
+            {isSuper && (
+               <div style={{marginTop: '1rem', padding: '1rem', border: '1px dashed #d3d8df', borderRadius: '4px', background: '#fffef0'}}>
+                  <h4 style={{fontSize: '0.8rem', color: '#856404', marginBottom: '0.5rem'}}><ShieldCheck size={14} /> Dados Sigilosos (Super User)</h4>
+                  <p style={{fontSize: '0.85rem'}}><strong>Status:</strong> {selecionada.statusSigiloso || 'Normal'}</p>
+                  <p style={{fontSize: '0.85rem', marginTop: '4px'}}><strong>Obs:</strong> {selecionada.obsSigilosa || 'Sem observações.'}</p>
+               </div>
+            )}
+            {isAdmin && (
+              <div style={{marginTop: '1.5rem', display: 'flex', gap: '1rem'}}>
+                <button className="btn btn-primary" onClick={() => { handleEditar(selecionada); setSelecionada(null); }}>
+                  <Edit3 size={16} /> Editar esta Pessoa
+                </button>
+              </div>
+            )}
           </div>
         )}
       </Modal>
 
-      <Modal aberto={modalEdicaoAberto} titulo="Editar pessoa" onClose={cancelar}>
-        <form onSubmit={handleSubmit}>
-          <div className="form-grid">
-            <div className="form-group">
-              <label>Nome completo *</label>
-              <input name="nome" value={form.nome} onChange={handleChange} required />
-            </div>
-            <div className="form-group">
-              <label>CPF *</label>
-              <input name="cpf" value={form.cpf} onChange={handleChange} required />
-            </div>
-            <div className="form-group">
-              <label>E-mail</label>
-              <input name="email" type="email" value={form.email} onChange={handleChange} />
-            </div>
-            <div className="form-group">
-              <label>Telefone</label>
-              <input name="telefone" value={form.telefone} onChange={handleChange} />
-            </div>
-            <div className="form-group">
-              <label>Data de nascimento</label>
-              <input name="dataNascimento" type="date" value={form.dataNascimento} onChange={handleChange} />
-            </div>
-            <div className="form-group">
-              <label>Senha inicial (opcional)</label>
-              <input name="senha" type="text" value={form.senha} onChange={handleChange} />
-            </div>
-          </div>
-          <div className="form-actions">
-            <button className="btn btn-primary" type="submit" disabled={enviando}>{enviando ? <span className="spinner" /> : null}Salvar alterações</button>
-            <button className="btn btn-secondary" type="button" onClick={cancelar}>Cancelar</button>
-          </div>
-        </form>
-      </Modal>
 
-      <Modal aberto={!!modalExclusaoPessoa} titulo="Confirmar exclusão" onClose={() => setModalExclusaoPessoa(null)}>
+      <Modal aberto={!!modalExclusaoPessoa} titulo="Confirmar Exclusão" onClose={() => setModalExclusaoPessoa(null)}>
         {modalExclusaoPessoa && (
           <div className="detail-grid">
-            <p>Confirma excluir <strong>{modalExclusaoPessoa.nome}</strong>?</p>
-            <div className="form-actions">
-              <button className="btn btn-danger" type="button" onClick={confirmarExclusao}>Excluir</button>
+            <p>Você tem certeza que deseja excluir <strong>{modalExclusaoPessoa.nome}</strong>? Esta ação removerá também o acesso do usuário.</p>
+            <div className="form-actions" style={{justifyContent: 'flex-end', marginTop: '1rem'}}>
               <button className="btn btn-secondary" type="button" onClick={() => setModalExclusaoPessoa(null)}>Cancelar</button>
+              <button className="btn btn-danger" type="button" onClick={confirmarExclusao}>Excluir Registro</button>
             </div>
           </div>
         )}
       </Modal>
 
-      <Modal aberto={!!credenciaisGeradas} titulo="Acesso gerado para a pessoa" onClose={() => setCredenciaisGeradas(null)}>
+      <Modal aberto={!!credenciaisGeradas} titulo="Acesso Gerado" onClose={() => setCredenciaisGeradas(null)}>
         {credenciaisGeradas && (
-          <div className="detail-grid">
+          <div className="detail-grid" style={{background: '#f0f9ff', padding: '1rem', borderRadius: '4px', border: '1px solid #bae6fd'}}>
+            <p style={{marginBottom: '0.5rem'}}>Usuário criado com sucesso!</p>
             <p><strong>Nome:</strong> {credenciaisGeradas.nome}</p>
-            <p><strong>Login:</strong> {credenciaisGeradas.login}</p>
-            <p><strong>Senha inicial:</strong> {credenciaisGeradas.senha}</p>
+            <p><strong>Login:</strong> <code style={{background: '#fff', padding: '2px 4px'}}>{credenciaisGeradas.login}</code></p>
+            <p><strong>Senha:</strong> <code style={{background: '#fff', padding: '2px 4px'}}>{credenciaisGeradas.senha}</code></p>
+            <p style={{marginTop: '0.5rem', fontSize: '0.8rem', color: '#0369a1'}}>Anote essas informações ou repasse ao usuário.</p>
           </div>
         )}
       </Modal>
 
-      <footer className="rodape">WPAH © {new Date().getFullYear()} — Gestão de Pessoas</footer>
+      <footer className="rodape">WPAH © {new Date().getFullYear()} — Secretaria Digital</footer>
     </div>
   );
 }

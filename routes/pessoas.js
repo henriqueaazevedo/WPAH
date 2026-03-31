@@ -16,10 +16,24 @@ async function listarPessoas(req, res) {
   const dataInicio = query.get('startDate') || '';
   const dataFim = query.get('endDate') || '';
 
-  const pessoas = (await lerColecao('pessoas')).filter(pessoa => {
-    return correspondeBusca(pessoa, termo, ['nome', 'cpf', 'email', 'telefone'])
-      && dentroDoPeriodo(pessoa, ['dataNascimento', 'criadoEm'], dataInicio, dataFim);
-  });
+  const [pessoasRaw, usuarios] = await Promise.all([
+    lerColecao('pessoas'),
+    lerColecao('usuarios')
+  ]);
+
+  const pessoas = pessoasRaw
+    .filter(pessoa => {
+      return correspondeBusca(pessoa, termo, ['nome', 'cpf', 'email', 'telefone'])
+        && dentroDoPeriodo(pessoa, ['dataNascimento', 'criadoEm'], dataInicio, dataFim);
+    })
+    .map(p => {
+      const u = usuarios.find(user => user.pessoaId === p.id);
+      return { 
+        ...p, 
+        usuario: u ? auth.sanitizarUsuario(u) : null,
+        ultimoAcesso: u ? u.ultimoAcesso : null 
+      };
+    });
 
   responder(res, 200, pessoas);
 }
@@ -79,7 +93,7 @@ async function atualizarPessoa(req, res, id, body) {
   const index = pessoas.findIndex(p => p.id === id);
   if (index === -1) return responder(res, 404, { erro: 'Pessoa não encontrada' });
 
-  const { nome, cpf, email, telefone, dataNascimento } = body;
+  const { nome, cpf, email, telefone, dataNascimento, statusSigiloso, obsSigilosa, role } = body;
   if (cpf && String(cpf).replace(/\D/g, '') !== String(pessoas[index].cpf).replace(/\D/g, '')) {
     const jaExiste = pessoas.find(p => String(p.cpf).replace(/\D/g, '') === String(cpf).replace(/\D/g, ''));
     if (jaExiste) return responder(res, 409, { erro: 'CPF já cadastrado para outra pessoa' });
@@ -92,6 +106,9 @@ async function atualizarPessoa(req, res, id, body) {
     email: email !== undefined ? (email || null) : pessoas[index].email,
     telefone: telefone !== undefined ? telefone : pessoas[index].telefone,
     dataNascimento: dataNascimento !== undefined ? dataNascimento : pessoas[index].dataNascimento,
+    statusSigiloso: statusSigiloso !== undefined ? statusSigiloso : pessoas[index].statusSigiloso,
+    obsSigilosa: obsSigilosa !== undefined ? obsSigilosa : pessoas[index].obsSigilosa,
+    role: role !== undefined ? role : (pessoas[index].role || 'user'),
     atualizadoEm: new Date().toISOString()
   };
 
@@ -99,7 +116,8 @@ async function atualizarPessoa(req, res, id, body) {
     await auth.atualizarUsuarioDaPessoa({
       pessoaId: id,
       nome: pessoas[index].nome,
-      email: pessoas[index].email
+      email: pessoas[index].email,
+      role: pessoas[index].role
     });
   } catch (erro) {
     return responder(res, 409, { erro: erro.message });
