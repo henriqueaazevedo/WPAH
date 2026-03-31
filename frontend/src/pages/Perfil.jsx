@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import LoadingBlock from '../components/LoadingBlock.jsx';
+import { Eye, EyeOff } from 'lucide-react';
 
 export default function Perfil() {
   const usuarioLocal = JSON.parse(localStorage.getItem('usuario') || '{}');
@@ -10,6 +11,7 @@ export default function Perfil() {
   const [erro, setErro] = useState('');
   const [msg, setMsg] = useState('');
   const [perfil, setPerfil] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     async function carregar() {
@@ -108,7 +110,23 @@ export default function Perfil() {
               </div>
               <div className="form-group">
                 <label>Nova senha</label>
-                <input name="senha" value={form.senha} onChange={handleChange} placeholder="Preencha apenas se quiser alterar" />
+                <div className="password-wrap">
+                  <input 
+                    name="senha" 
+                    type={showPassword ? 'text' : 'password'}
+                    value={form.senha} 
+                    onChange={handleChange} 
+                    placeholder="Alterar sua senha" 
+                  />
+                  <button 
+                    type="button" 
+                    className="password-toggle" 
+                    onClick={() => setShowPassword(!showPassword)}
+                    tabIndex="-1"
+                  >
+                    {showPassword ? <Eye size={20} /> : <EyeOff size={20} />}
+                  </button>
+                </div>
               </div>
               <div className="form-group">
                 <label>Login atual</label>

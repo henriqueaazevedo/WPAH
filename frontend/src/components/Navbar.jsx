@@ -1,11 +1,13 @@
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
+import { Menu, User, LogOut, Shield } from 'lucide-react';
+import Sidebar from './Sidebar.jsx';
 
 export default function Navbar() {
-  const location = useLocation();
   const navigate = useNavigate();
   const usuario = JSON.parse(localStorage.getItem('usuario') || '{}');
   const [saindo, setSaindo] = useState(false);
+  const [sideOpen, setSideOpen] = useState(false);
 
   function sair() {
     if (saindo) return;
@@ -14,39 +16,60 @@ export default function Navbar() {
     setTimeout(() => navigate('/login'), 220);
   }
 
-  function ativo(path) {
-    return location.pathname.startsWith(path) ? 'navbar-link ativo' : 'navbar-link';
-  }
+  const roleBadge = () => {
+    if (usuario.role === 'super') return <span className="navbar-tag" style={{borderColor: '#fbbf24', color: '#fbbf24'}}><Shield size={12} fill="#fbbf24" /> Super User</span>;
+    if (usuario.role === 'admin') return <span className="navbar-tag"><Shield size={12} fill="#164b80" /> Admin</span>;
+    return null;
+  };
 
   return (
-    <header>
+    <header className="main-header">
       <div className="gov-feedback-bar">
-        Queremos ouvir voce: avalie o novo portal e ajude a melhorar os servicos digitais.
+        WPAH | Sistema de Gestão Interna da Secretaria Digital
       </div>
       <div className="site-header">
         <div className="site-header-inner">
-          <Link to="/pessoas" className="site-logo">WPAH | Secretaria Digital</Link>
-        </div>
-      </div>
-      <nav className="navbar">
-        <div className="navbar-inner">
-          <div className="navbar-nav">
-            <Link to="/pessoas" className={ativo('/pessoas')}>Pessoas e Cadastros</Link>
-            <Link to="/documentos" className={ativo('/documentos')}>Leis e Documentos</Link>
-            <Link to="/protocolos" className={ativo('/protocolos')}>Protocolos</Link>
-            <Link to="/servicos" className={ativo('/servicos')}>Servicos</Link>
-            <Link to="/transparencia" className={ativo('/transparencia')}>Transparencia</Link>
+          <div className="header-left">
+            <button 
+              className="menu-toggle-btn" 
+              onClick={() => setSideOpen(true)}
+              aria-label="Abrir menu"
+            >
+              <Menu size={24} />
+            </button>
+            <Link to="/inicio" className="site-logo">
+              <span className="logo-text">WPAH</span>
+              <span className="logo-divider">/</span>
+              <span className="logo-subtext">Secretaria</span>
+            </Link>
           </div>
-          <div className="navbar-usuario">
-            <Link to="/perfil" className={ativo('/perfil')}>Perfil</Link>
-            <span className="navbar-tag">{usuario.nome || 'Usuario'}</span>
-            <button className="btn btn-sm btn-logout" onClick={sair} type="button" disabled={saindo}>
-              {saindo ? <span className="spinner" /> : null}
-              {saindo ? 'Saindo...' : 'Sair'}
+
+          <div className="header-right">
+            {roleBadge()}
+            <div className="user-pill" onClick={() => navigate('/perfil')}>
+              <div className="user-avatar-mini">
+                <User size={16} />
+              </div>
+              <span className="user-name-mini">{usuario.nome?.split(' ')[0]}</span>
+            </div>
+            <button 
+              className="btn-exit-header" 
+              onClick={sair} 
+              disabled={saindo}
+              title="Sair do sistema"
+            >
+              <LogOut size={18} />
             </button>
           </div>
         </div>
-      </nav>
+      </div>
+
+      <Sidebar 
+        isOpen={sideOpen} 
+        toggle={() => setSideOpen(!sideOpen)} 
+        usuario={usuario} 
+        sair={sair}
+      />
     </header>
   );
 }

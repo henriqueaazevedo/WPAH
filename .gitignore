@@ -1,2 +1,8 @@
-.vercel
-.env*.local
+node_modules/
+.vercel/
+dist/
+.DS_Store
+*.log
+seed.js
+tmp_check.js
+.env
